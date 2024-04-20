@@ -1,0 +1,19 @@
+# -- package-specific --
+fastapi
+starlette
+uvicorn
+inotify_simple
+tqdm
+wcmatch
+
+# -- logging --
+colorama
+
+# -- sphinx docs --
+sphinx
+sphinx-togglebutton
+furo
+myst-parser
+
+# -- testing ---
+pytest

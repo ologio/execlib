@@ -1,3 +1,12 @@
+'''
+Handler
+
+Websocket endpoint subclass intended to route websocket connections in a Server context. 
+
+Note: the current Handler class is very specific, tailored entirely to handling a
+supported live-reload handshake. This should likely be made more general, but until
+separate handshakes or endpoints are needed, it's fine as is.
+'''
 import re
 import logging
 from pathlib import Path

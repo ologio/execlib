@@ -2,29 +2,33 @@
 Implements a file system watcher.
 
 See also:
-    - https://inotify-simple.readthedocs.io/en/latest/#gracefully-exit-a-blocking-read
+
+- https://inotify-simple.readthedocs.io/en/latest/#gracefully-exit-a-blocking-read
 '''
 import threading
 
+from execlog.event import Event
 
-class Listener(threading.Thread):
-    def __init__(self, router):
+
+class Listener[E: Event](threading.Thread):
+    def __init__(self, router: 'Router[E]'):
         '''
         Parameters:
-            workers: number of workers to assign the thread pool when the event loop is
-                     started. Defaults to `None`, which, when passed to
-                     ThreadPoolExecutor, will by default use 5x the number of available
-                     processors on the machine (which the docs claim is a reasonable
-                     assumption given threads are more commonly leveraged for I/O work
-                     rather than intense CPU operations). Given the intended context for
-                     this class, this assumption aligns appropriately.
+            router: associated Router instance that events should be passed to
         '''
         super().__init__()
 
         self.router = router
 
     def listen(self):
+        '''
+        Register a new listener endpoint
+        '''
         raise NotImplementedError
 
     def run(self):
+        '''
+        Begin listening for events. Typically a blocking loop that passes events to
+        attached Router.
+        '''
         raise NotImplementedError

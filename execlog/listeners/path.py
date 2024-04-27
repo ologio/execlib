@@ -1,11 +1,3 @@
-'''
-Implements a file system watcher.
-
-See also:
-
-- https://inotify-simple.readthedocs.io/en/latest/#gracefully-exit-a-blocking-read
-'''
-#import fnmatch
 import os
 import time
 import select
@@ -15,27 +7,18 @@ from collections import defaultdict
 
 from inotify_simple import INotify, Event as iEvent, flags as iflags, masks as imasks
 
-from execlog import util 
+from execlog import util
+from execlog.event import FileEvent
 from execlog.listener import Listener
 
 
 logger = logging.getLogger(__name__)
 
-# hardcoded file names to ignore
-# - "4913" is a temp file created by Vim before editing
-IGNORE_PATTERNS = ['4913', '.sync*.db*']
-
-class PathListener(Listener):
+class PathListener(Listener[FileEvent]):
     def __init__(self, router):
         '''
         Parameters:
-            workers: number of workers to assign the thread pool when the event loop is
-                     started. Defaults to `None`, which, when passed to
-                     ThreadPoolExecutor, will by default use 5x the number of available
-                     processors on the machine (which the docs claim is a reasonable
-                     assumption given threads are more commonly leveraged for I/O work
-                     rather than intense CPU operations). Given the intended context for
-                     this class, this assumption aligns appropriately.
+            router: associated Router instance that events should be passed to
 
         Note:
             Due to the nature of INotify, you cannot watch the same path with two
@@ -60,7 +43,7 @@ class PathListener(Listener):
         self.inotify = INotify()
 
         self.read_fd, write_fd = os.pipe()
-        self.write = os.fdopen(write_fd, "wb")
+        self.write = os.fdopen(write_fd, 'wb')
 
     def _add_watch(
         self,
@@ -128,14 +111,13 @@ class PathListener(Listener):
         flags=None,
     ):
         '''
+        Listen to file events occurring under a provided path, optionally only events
+        matching provided iNotify flags.
+
         Parameters:
             path:  Path (directory) to watch with `inotify`
             flags: inotify_simple flags matching FS event types allowed to trigger the
                    callback
-            debounce: time in milliseconds to debounce file-based events at this path.
-                      Applies to _file targets_; the same filename will have events
-                      "debounced" at this interval (time delta calculated from last
-                      un-rejected match).
         '''
         path = Path(path)
 
@@ -159,10 +141,6 @@ class PathListener(Listener):
             `start()` is a blocking call. This will hog your main thread if not properly
             threaded. If handling this manually in your outer context, you will also need
             to make sure to call `.stop()`
-
-        Parameters:
-            loop: asyncio loop to pass to `_event_loop`; used to schedule async callbacks
-                  when present
         '''
         self.started = True
         logger.info(f'Starting listener for {len(self.watchmap)} paths')
@@ -332,7 +310,7 @@ class PathListener(Listener):
         
         for event in events:
             # hard coded ignores
-            if util.path.glob_match(event.name, IGNORE_PATTERNS): continue
+            if util.path.glob_match(event.name, util.path.IGNORE_PATTERNS): continue
 
             mask_flags = iflags.from_mask(event.mask)
 

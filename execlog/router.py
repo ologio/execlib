@@ -1,3 +1,6 @@
+'''
+Router
+'''
 import time
 import asyncio
 import logging
@@ -8,21 +11,18 @@ from pathlib import Path
 from typing import Callable
 from functools import partial
 from colorama import Fore, Style
-from collections import namedtuple, defaultdict
+from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, wait, as_completed
 
 from tqdm.auto import tqdm
 
+from execlog.event import Event
+from execlog.listener import Listener
+
+
 logger = logging.getLogger(__name__)
 
-
-Event = namedtuple(
-    'Event',
-    ['endpoint', 'name', 'action'],
-    defaults=[None, None, None],
-)
-
-class Router: 
+class Router[E: Event]:
     '''
     Route events to registered callbacks
 
@@ -74,16 +74,22 @@ class Router:
         earlier ones, or interact with intermediate disk states (raw file writes, DB
         inserts, etc), before the earliest call has had a chance to clean up.
     '''
-    def __init__(self, loop=None, workers=None, listener_cls=None):
+    listener_cls = Listener[E]
+
+    def __init__(self, loop=None, workers=None):
         '''
         Parameters:
             loop:
-            workers:
-            listener_cls:
+            workers: number of workers to assign the thread pool when the event loop is
+                     started. Defaults to `None`, which, when passed to
+                     ThreadPoolExecutor, will by default use 5x the number of available
+                     processors on the machine (which the docs claim is a reasonable
+                     assumption given threads are more commonly leveraged for I/O work
+                     rather than intense CPU operations). Given the intended context for
+                     this class, this assumption aligns appropriately.
         '''
         self.loop         = loop
         self.workers      = workers
-        self.listener_cls = listener_cls
 
         self.routemap        : dict[str, list[tuple]] = defaultdict(list)
         self.post_callbacks = []
@@ -141,7 +147,7 @@ class Router:
         route_tuple = (callback, pattern, debounce, delay, listener_kwargs)
         self.routemap[endpoint].append(route_tuple)
 
-    def submit(self, events, callbacks=None):
+    def submit(self, events:E | list[E], callbacks=None):
         '''
         Handle a list of events. Each event is matched against the registered callbacks,
         and those callbacks are ran concurrently (be it via a thread pool or an asyncio
@@ -235,7 +241,7 @@ class Router:
 
         return future
 
-    def matching_routes(self, event, event_time=None):
+    def matching_routes(self, event: E, event_time=None):
         '''
         Return eligible matching routes for the provided event.
 
@@ -288,7 +294,7 @@ class Router:
                 # set next debounce 
                 self.next_allowed_time[index] = event_time + debounce
 
-                match_text = Style.BRIGHT + Fore.GREEN + 'matched'
+                match_text = Style.BRIGHT + Fore.GREEN + 'matched' + Fore.RESET
 
                 callback_name = str(callback)
                 if hasattr(callback, '__name__'):
@@ -298,7 +304,7 @@ class Router:
                     f'Event [{name}] {match_text} [{pattern}] under [{endpoint}] for [{callback_name}]'
                 )
             else:
-                match_text = Style.BRIGHT + Fore.RED + 'rejected'
+                match_text = Style.BRIGHT + Fore.RED + 'rejected' + Fore.RESET
                 logger.debug(
                     f'Event [{name}] {match_text} against [{pattern}] under [{endpoint}] for [{callback.__name__}]'
                 )
@@ -373,6 +379,7 @@ class Router:
         '''
         if listener_cls is None:
             listener_cls = self.listener_cls
+
         if listener_cls is None:
             raise ValueError('No Listener class provided')
 

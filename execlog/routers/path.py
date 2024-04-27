@@ -1,34 +1,25 @@
 import logging
 from pathlib import Path
+from typing import Callable
 
 from execlog.router import Router
-from execlog.listeners.path import PathListener
+from execlog.event import FileEvent
 from execlog.util.path import glob_match
+from execlog.listeners.path import PathListener
 
 
 logger = logging.getLogger(__name__)
 
-class PathRouter(Router):
-    def __init__(self, loop=None, workers=None, listener_cls=PathListener):
-        '''
-        Parameters:
-            workers: number of workers to assign the thread pool when the event loop is
-                     started. Defaults to `None`, which, when passed to
-                     ThreadPoolExecutor, will by default use 5x the number of available
-                     processors on the machine (which the docs claim is a reasonable
-                     assumption given threads are more commonly leveraged for I/O work
-                     rather than intense CPU operations). Given the intended context for
-                     this class, this assumption aligns appropriately.
-        '''
-        super().__init__(loop=loop, workers=workers, listener_cls=listener_cls)
-    
+class PathRouter(Router[FileEvent]):
+    listener_cls = PathListener
+
     def register(
         self,
-        path,
-        func,
-        glob='**/!(.*|*.tmp|*~)', # recursive, non-temp
-        debounce=200,
-        delay=30,
+        path     : Path,
+        func     : Callable,
+        glob     : str       = '**/!(.*|*.tmp|*~)', # recursive, non-temp
+        debounce : int|float = 200,
+        delay    : int|float = 30,
         **listener_kwargs,
     ):
         '''
@@ -38,6 +29,8 @@ class PathRouter(Router):
             glob:  Relative glob pattern to match files in provided path. The FS event's
                    filename must match this pattern for the callback to queued. (Default:
                    "*"; matching all files in path).
+            debounce:
+            delay:
             listener_kwargs: Additional params for associated listener "listen" routes.
                              See `PathListener.listen`.
         '''

@@ -6,6 +6,10 @@ from pathlib import Path
 from wcmatch import glob as wc_glob 
 
 
+# hardcoded file names to ignore
+# - "4913" is a temp file created by Vim before editing
+IGNORE_PATTERNS = ['4913', '.sync*.db*']
+
 camel2snake_regex = re.compile(r'(?<!^)(?=[A-Z])')
 
 def iter_nested_paths(path: Path, ext: str = None, no_dir=False, relative=False):

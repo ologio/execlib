@@ -1,3 +1,17 @@
+'''
+Server
+
+Central management object for both file serving systems (static server, live reloading)
+and job execution (routing and listening). Routers and Listeners can be started and
+managed independently, but a single Server instance can house, start, and shutdown
+listeners in one place.
+
+TODO: as it stands, the Server requires address and port details, effectively needing one
+of the HTTP items (static file serving or livereloading) to be initialized appropriately.
+But there is a clear use case for just managing disparate Routers and their associated
+Listeners. Should perhaps separate this "grouped listener" into another object, or just
+make the Server definition more flexible.
+'''
 import re
 import asyncio
 import logging
@@ -5,9 +19,9 @@ import threading
 from functools import partial
 
 import uvicorn
+from inotify_simple import flags
 from fastapi import FastAPI, WebSocket
 from fastapi.staticfiles import StaticFiles
-from inotify_simple import flags
 
 from execlog.handler import Handler as LREndpoint
 
@@ -29,9 +43,16 @@ class Server:
     ):
         '''
         Parameters:
+            host:              host server address (either 0.0.0.0, 127.0.0.1, localhost)
+            port:              port at which to start the server
+            root:              base path for static files _and_ where router bases are attached (i.e.,
+                               when files at this path change, a reload event will be
+                               propagated to a corresponding client page)
+            static:            whether or not to start a static file server
+            livereload:        whether or not to start a livereload server
             managed_listeners: auxiliary listeners to "attach" to the server process, and to
-                              propagate the shutdown signal to when the server receives an
-                              interrupt.
+                               propagate the shutdown signal to when the server receives an
+                               interrupt.
         '''
         self.host       = host
         self.port       = port
@@ -66,8 +87,8 @@ class Server:
 
         Note that, when present, the livereload endpoint is registered first, as the order
         in which routes are defined matters for FastAPI apps. This allows `/livereload` to
-        behave appropriately, despite the root re-mount that takes place if serving static
-        files.
+        behave appropriately, even when remounting the root if serving static files
+        (which, if done in the opposite order, would "eat up" the `/livereload` endpoint).
         '''
         # enable propagation and clear handlers for uvicorn internal loggers;
         # allows logging messages to propagate to my root logger
@@ -100,7 +121,7 @@ class Server:
         '''
         flags.MODIFY okay since we don't need to reload non-existent pages
         '''
-        from localsys.reloader.router import PathRouter
+        from execlog.reloader.router import PathRouter
 
         if self.loop is None:
             self.loop = asyncio.new_event_loop()

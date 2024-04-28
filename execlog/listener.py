@@ -32,3 +32,10 @@ class Listener[E: Event](threading.Thread):
         attached Router.
         '''
         raise NotImplementedError
+
+    def stop(self):
+        '''
+        Begin listening for events. Typically a blocking loop that passes events to
+        attached Router.
+        '''
+        raise NotImplementedError

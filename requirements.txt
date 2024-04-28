@@ -5,6 +5,7 @@ uvicorn
 inotify_simple
 tqdm
 wcmatch
+websockets
 
 # -- logging --
 colorama

@@ -10,13 +10,13 @@ class ColorFormatter(logging.Formatter):
     colorama.init(autoreset=True)
 
     FORMATS = {
-        'x':               Fore.YELLOW  + _format,
-        'listener':                Fore.GREEN   + _format,
-        'handler':          Fore.CYAN    + _format,
-        'server': Style.DIM    + Fore.CYAN + _format,
-        'router':        Fore.MAGENTA + _format,
-        'site':              Fore.BLUE    + _format,
-        'utils':             Style.DIM    + Fore.WHITE + _format,
+        'x':         Fore.YELLOW  + _format,
+        'listener':  Fore.GREEN   + _format,
+        'handler':   Fore.CYAN    + _format,
+        'server':    Style.DIM    + Fore.CYAN + _format,
+        'router':    Fore.MAGENTA + _format,
+        'site':      Fore.BLUE    + _format,
+        'utils':     Style.DIM    + Fore.WHITE + _format,
     }
     FORMATS = { k:logging.Formatter(v) for k,v in FORMATS.items() }
     DEFAULT_LOGGER = logging.Formatter(_format)

@@ -355,12 +355,30 @@ class PathListener(Listener[FileEvent]):
                 self.update_moved_to(path, lead)
 
     def stop(self):
+        '''
+        Shutdown active listener processes, including the attached router thread pool and
+        the iNotify event loop.
+
+        Note:
+            Shutting down the thread pool will wait until pending futures are finished
+            executing before actually returning. A common source of error is having the
+            main process exit before final tasks can be submitted, resulting in
+            RuntimeErrors that cannot "schedule new futures after interpreter shutdown."
+            So you either need to ensure the final tasks are scheduled before calling
+            `stop()` (this means more than just a `submit()` call; it must have actually
+            propagated through to `submit_callback` and reached `thread_pool.submit`) to
+            allow them to be handled automatically prior to shutdown, or manually wait on
+            their futures to complete. Otherwise, thread pool shutdown will occur, and
+            they'll still be making their way out of the queue only to reach the
+            `thread_pool.submit` after it's had its final boarding call.
+        '''
         logger.info("Stopping listener...")
 
-        if self.router.thread_pool is not None:
-            self.router.thread_pool.shutdown()
-        
         # request INotify stop by writing in the pipe, checked in watch loop
         if not self.write.closed:
             self.write.write(b"\x00")
             self.write.close()
+
+        if self.router.thread_pool is not None:
+            self.router.thread_pool.shutdown()
+        

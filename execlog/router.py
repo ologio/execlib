@@ -103,6 +103,9 @@ class Router[E: Event]:
         # store prepped (e.g., delayed) callbacks
         self.callback_registry = {}
 
+        # track event history
+        self.event_log = []
+
         self._thread_pool = None
         self._route_lock  = threading.Lock()
 
@@ -115,15 +118,14 @@ class Router[E: Event]:
     def register(
         self,
         endpoint,
-        callback,
+        callback: Callable,
         pattern,
         debounce=200,
         delay=10,
         **listener_kwargs,
     ):
         '''
-        Register a route. To be defined by an inheriting class, typically taking a pattern
-        and a callback.
+        Register a route. 
 
         Note: Listener arguments
             Notice how listener_kwargs are accumulated instead of uniquely assigned to an
@@ -139,15 +141,18 @@ class Router[E: Event]:
             submitted event's `action` value.
 
         Parameters:
-            pattern: hashable object to be used when filtering event (passed to inherited
-                     `filter(...)`)
+            endpoint:
             callback: callable accepting an event to be executed if when a matching event
                       is received
+            pattern: hashable object to be used when filtering event (passed to inherited
+                     `filter(...)`)
+            debounce:
+            delay:
         '''
         route_tuple = (callback, pattern, debounce, delay, listener_kwargs)
         self.routemap[endpoint].append(route_tuple)
 
-    def submit(self, events:E | list[E], callbacks=None):
+    def submit(self, events:E | list[E], callbacks:list[Callable]|None=None):
         '''
         Handle a list of events. Each event is matched against the registered callbacks,
         and those callbacks are ran concurrently (be it via a thread pool or an asyncio
@@ -164,7 +169,7 @@ class Router[E: Event]:
 
         return futures
 
-    def submit_event(self, event, callbacks=None):
+    def submit_event(self, event: E, callbacks:list[Callable]|None=None):
         '''
         Group up and submit all matching callbacks for `event`. All callbacks are ran
         concurrently in their own threads, and this method blocks until all are completed.
@@ -173,13 +178,11 @@ class Router[E: Event]:
         thread, and the registered post-callbacks are attached to the completion of this
         function, i.e., the finishing of all callbacks matching provided event.
 
-        Note that there are no checks for empty callback lists, where we could exit early.
-        Here we simply rely on methods doing the right thing: `wait_on_futures` would
-        simply receive an empty list, for example. Nevertheless, once an event is
-        submitted with this method, it gets at least a few moments where that event is
-        considered "running," and will be later popped out by `clear_events` (almost
-        immediately if there is in fact nothing to do). An early exit would simply have to
-        come after indexing the event in `running_events`
+        Note that an event may not match any routes, in which case the method exits early.
+        An empty list is returned, and this shows up as the outer future's result. In this
+        case, the event is never considered "running," and the non-result picked up in
+        `clear_event` will ensure it exits right away (not even attempting to pop the
+        event from the running list, and for now not tracking it in the event log).
         '''
         if callbacks is None:
             # ensure same thread gets all matching routes & sets debounce updates; else
@@ -216,7 +219,7 @@ class Router[E: Event]:
 
         return future_results
 
-    def submit_callback(self, callback, *args, **kwargs):
+    def submit_callback(self, callback: Callable, *args, **kwargs):
         '''
         Note: this method is expected to return a future. Perform any event-based
         filtering before submitting a callback with this method.
@@ -311,7 +314,7 @@ class Router[E: Event]:
 
         return matches
 
-    def get_delayed_callback(self, callback, delay, index):
+    def get_delayed_callback(self, callback: Callable, delay: int|float, index):
         '''
         Parameters:
             callback: function to wrap  
@@ -348,7 +351,7 @@ class Router[E: Event]:
 
         return future_results
 
-    def wait_on_callbacks(self, callbacks, event, *args, **kwargs):
+    def wait_on_callbacks(self, callbacks: list[Callable], event: E, *args, **kwargs):
         '''
         Overridable by inheriting classes based on callback structure
         '''
@@ -357,16 +360,20 @@ class Router[E: Event]:
             for callback in callbacks
         ])
 
-    def queue_callbacks(self, event_idx, callbacks):
+    def queue_callbacks(self, event_idx, callbacks: list[Callable]):
         '''
         Overridable by inheriting classes based on callback structure
         '''
         self.running_events[event_idx].update(callbacks)
 
-    def filter(self, event, pattern, **listen_kwargs) -> bool:
+    def filter(self, event: E, pattern, **listen_kwargs) -> bool:
         '''
+        Determine if a given event matches the providedpattern
+
         Parameters:
-            listen_kwargs_list: 
+            event:
+            pattern:
+            listen_kwargs: 
         '''
         raise NotImplementedError
 
@@ -403,7 +410,7 @@ class Router[E: Event]:
         event_idx = self.event_index(event)
         return self.running_events.pop(event_idx, None)
 
-    def clear_event(self, event, future):
+    def clear_event(self, event: E, future):
         '''
         Clear an event. Pops the passed event out of `running_events`, and the request
         counter is >0, the event is re-submitted.
@@ -419,10 +426,13 @@ class Router[E: Event]:
         The check for results from the passed future allows us to know when in fact a
         valid frame has finished, and a resubmission may be on the table.
         '''
-        if not future.result(): return
+        result = future.result()
+        if not result: return
+
+        self.event_log.append((event, result))
         queued_callbacks = self.stop_event(event)
 
-        # resubmit event if some queued work
+        # resubmit event if some queued work remains
         if queued_callbacks and len(queued_callbacks) > 0:
             logger.debug(
                 f'Event [{event.name}] resubmitted with [{len(queued_callbacks)}] queued callbacks'
@@ -433,7 +443,7 @@ class Router[E: Event]:
         return event[:2]
 
 
-class ChainRouter(Router):
+class ChainRouter[E: Event](Router[E]):
     '''
     Routes events to registered callbacks
     '''
@@ -460,7 +470,7 @@ class ChainRouter(Router):
         for endpoint, routelist in router.routemap.items():
             self.routemap[endpoint].extend(routelist)
 
-    def matching_routes(self, event, event_time=None):
+    def matching_routes(self, event: E, event_time=None):
         '''
         Colloquial `callbacks` now used as a dict of lists of callbacks, indexed by
         router, and only having keys for routers with non-empty callback lists.
@@ -476,7 +486,7 @@ class ChainRouter(Router):
 
         return route_map
 
-    def wait_on_callbacks(self, callbacks, event, *args, **kwargs):
+    def wait_on_callbacks(self, callbacks, event: E, *args, **kwargs):
         '''
         Note: relies on order of callbacks dict matching that of `ordered_routers`, which
         should happen in `matching_routes`

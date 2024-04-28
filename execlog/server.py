@@ -17,12 +17,14 @@ import asyncio
 import logging
 import threading
 from functools import partial
+from contextlib import asynccontextmanager
 
 import uvicorn
 from inotify_simple import flags
 from fastapi import FastAPI, WebSocket
 from fastapi.staticfiles import StaticFiles
 
+from execlog.routers.path import PathRouter
 from execlog.handler import Handler as LREndpoint
 
 
@@ -65,6 +67,7 @@ class Server:
         self.managed_listeners = managed_listeners
 
         self.listener = None
+        self.userver  = None
         self.server   = None
         self.server_text = ''
         self.server_args = {}
@@ -104,9 +107,14 @@ class Server:
         self.server_args['host'] = self.host
         self.server_args['port'] = self.port
 
+        @asynccontextmanager
+        async def lifespan(app: FastAPI):
+            yield
+            self.shutdown()
+
         if self.static or self.livereload:
-            self.server = FastAPI()
-            self.server.on_event('shutdown')(self.shutdown)
+            self.server = FastAPI(lifespan=lifespan)
+            #self.server.on_event('shutdown')(self.shutdown)
 
         if self.livereload:
             self._wrap_livereload()
@@ -121,8 +129,6 @@ class Server:
         '''
         flags.MODIFY okay since we don't need to reload non-existent pages
         '''
-        from execlog.reloader.router import PathRouter
-
         if self.loop is None:
             self.loop = asyncio.new_event_loop()
             asyncio.set_event_loop(self.loop)
@@ -195,6 +201,17 @@ class Server:
             explicitly in order for things to be handled gracefully. This is done in the
             server setup step, where we ensure FastAPI calls `watcher.stop()` during its
             shutdown process.
+
+        Note: on event loop management
+            The uvicorn server is ran with `run_until_complete`, intended as a
+            long-running process to eventually be interrupted or manually disrupted with a
+            call to `shutdown()`. The `shutdown` call attempts to gracefully shutdown the
+            uvicorn process by setting a `should_exit` flag. Upon successful shutdown, the
+            server task will be considered complete, and we can then manually close the
+            loop following the interruption. So a shutdown call (which is also attached as
+            a lifespan shutdown callback for the FastAPI object) will disable listeners
+            and shut down their thread pools, gracefully close up the Uvicorn server and
+            allow the serve coroutine to complete, and finally close down the event loop.
         '''
         if self.loop is None:
             self.loop = asyncio.new_event_loop()
@@ -209,17 +226,61 @@ class Server:
             logger.info(f'Server{self.server_text} @ http://{self.host}:{self.port}')
 
             uconfig = uvicorn.Config(app=self.server, loop=self.loop, **self.server_args)
-            userver = uvicorn.Server(config=uconfig)
-            self.loop.run_until_complete(userver.serve())
+            self.userver = uvicorn.Server(config=uconfig)
+            self.loop.run_until_complete(self.userver.serve())
+            self.loop.close()
 
     def shutdown(self):
         '''
         Additional shutdown handling after the FastAPI event loop receives an interrupt.
 
-        Currently this 
+        This is attached as a "shutdown" callback when creating the FastAPI instance,
+        which generally appears to hear interrupts and propagate them through.
+
+        This method can also be invoked programmatically, such as from a thread not
+        handling the main event loop. Note that either of the following shutdown
+        approaches of the Uvicorn server do not appear to work well in this case; they
+        both stall the calling thread indefinitely (in the second case, when waiting on
+        the shutdown result), or simply don't shutdown the server (in the first). Only
+        setting `should_exit` and allowing for a graceful internal shutdown appears to
+        both 1) handle this gracefully, and 2) shut down the server at all.
+
+        ```
+        self.loop.call_soon_threadsafe(self.userver.shutdown)
+            
+        # OR #
+
+        future = asyncio.run_coroutine_threadsafe(self.userver.shutdown(), self.loop)
+
+        # and wait for shutdown
+        future.result()
+        ```
+
+        The shutdown process goes as follows:
+
+        1. Stop any managed listeners: close out listener loops and/or thread pools by
+           calling `stop()` on each of the managed listeners. This prioritizes their
+           closure so that no events can make their way into the queue.
+        2. Gracefully shut down the wrapper Uvicorn server. This is the process that
+           starts the FastAPI server instance; set the `should_exit` flag.
+
+        If this completes successfully, in the thread where Uvicorn was started the server
+        task should be considered "completed," at which point the event loop can be closed
+        successfully.
         '''
         logger.info("Shutting down server...")
 
         # stop attached auxiliary listeners, both internal & external
-        for listener in self.managed_listeners:
-            listener.stop()
+        if self.managed_listeners:
+            logger.info(f"Stopping {len(self.managed_listeners)} listeners...")
+
+            for listener in self.managed_listeners:
+                listener.stop()
+
+        # stop FastAPI server if started
+        if self.userver is not None:
+            def set_should_exit():
+                self.userver.should_exit = True
+
+            self.loop.call_soon_threadsafe(set_should_exit)
+

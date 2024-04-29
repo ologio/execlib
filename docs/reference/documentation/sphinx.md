@@ -105,7 +105,19 @@ pages:
 **Reference directives**
 
 
+## Notes on docstring syntax
+- Code literals need to be surrounded in two backticks, e.g., "``variable``". Sphinx will
+  also complain if you make the reference plural by having an "s" after the backtick; it
+  needs to go on the inside.
+- MyST parsing, even if enabled, doesn't apply to docstrings. You need to use RST
+  generally, with a few directives being different under extensions like `napoleon`.
+- Code blocks and admonitions need a space between the heading and the rest of the
+  content.
+
+Nice syntax cheatsheet [here][4]
+
+
 [1]: https://pradyunsg.me/furo/
 [2]: https://www.sphinx-doc.org/en/master/man/sphinx-apidoc.html
 [3]: https://www.sphinx-doc.org/en/master/usage/extensions/autodoc.html#
-
+[4]: https://sphinx-tutorial.readthedocs.io/cheatsheet/

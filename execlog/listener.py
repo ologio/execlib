@@ -1,5 +1,4 @@
 '''
-Implements a file system watcher.
 
 See also:
 
@@ -11,6 +10,9 @@ from execlog.event import Event
 
 
 class Listener[E: Event](threading.Thread):
+    '''
+    Implements a file system watcher.
+    '''
     def __init__(self, router: 'Router[E]'):
         '''
         Parameters:

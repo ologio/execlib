@@ -26,45 +26,49 @@ class Router[E: Event]:
     '''
     Route events to registered callbacks
 
-    Generalized registration includes an endpoint (the origin of an event), a pattern (to
-    filter events at the endpoint), and a callback (to be executed if pattern is matched).
+    .. note::
 
-    The Router _routes_ events to affiliated callbacks in a multi-threaded fashion. A
-    thread pool handles these jobs as events are submitted, typically by a composing
-    Listener. The Listener "hears" an event, and passes it on through to a Router to
-    further filter and delegate any matching follow-up jobs.
+        Generalized registration includes an endpoint (the origin of an event), a pattern (to
+        filter events at the endpoint), and a callback (to be executed if pattern is matched).
 
-    This base Router implements most of the registry and filter model. When events are
-    submitted for propagation, they are checked for matching routes. Events specify an
-    origin endpoint, which is used as the filter for attached routes. The event is then
-    subjected to the `filter` method, which checks if the event matches the registered
-    `pattern` under the originated `endpoint`. If so, the callback is scheduled for
-    execution, and the matching event is passed as its sole argument.
+        The Router _routes_ events to affiliated callbacks in a multi-threaded fashion. A
+        thread pool handles these jobs as events are submitted, typically by a composing
+        Listener. The Listener "hears" an event, and passes it on through to a Router to
+        further filter and delegate any matching follow-up jobs.
 
-    Subclasses are expected to implement (at least) the `filter` method. This function is
-    responsible for wrapping up the task-specific logic needed to determine if an event,
-    originating from a known endpoint, matches the callback-specific pattern. This method
-    needn't handle any other filter logic, like checking if the event originates from the
-    provided endpoint, as this is already handled by the outer look in `matching_routes`.
+        This base Router implements most of the registry and filter model. When events are
+        submitted for propagation, they are checked for matching routes. Events specify an
+        origin endpoint, which is used as the filter for attached routes. The event is then
+        subjected to the ``filter`` method, which checks if the event matches the registered
+        ``pattern`` under the originated ``endpoint``. If so, the callback is scheduled for
+        execution, and the matching event is passed as its sole argument.
 
-    `get_listener` is a convenience method that instantiates and populates an affiliated
-    Listener over the register paths found in the Router. Listeners require a Router upon
-    instantiation so events can be propagated to available targets when they occur.
-    `get_listener()` is the recommended way to attain a Listener.
+        Subclasses are expected to implement (at least) the ``filter`` method. This function is
+        responsible for wrapping up the task-specific logic needed to determine if an event,
+        originating from a known endpoint, matches the callback-specific pattern. This method
+        needn't handle any other filter logic, like checking if the event originates from the
+        provided endpoint, as this is already handled by the outer look in ``matching_routes``.
 
-    Note: on debouncing events
+        ``get_listener`` is a convenience method that instantiates and populates an affiliated
+        Listener over the register paths found in the Router. Listeners require a Router upon
+        instantiation so events can be propagated to available targets when they occur.
+        ``get_listener()`` is the recommended way to attain a Listener.
+
+    .. admonition:: on debouncing events
+
         Previously, debouncing was handled by listeners. This logic has been generalized
         and moved to this class, as it's general enough to be desired across various
         Listener types. We also need unique, identifying info only available with a
-        `(endpoint, callback, pattern)` triple in order to debounce events in accordance
+        ``(endpoint, callback, pattern)`` triple in order to debounce events in accordance
         with their intended target.
 
-    Note: tracking events and serializing callback frames
+    .. admonition:: tracking events and serializing callback frames
+
         Although not part of the original implementation, we now track which events have a
         callback chain actively being executed, and prevent the same chain from being
         started concurrently. If the callback chain is actively running for an event, and
         that same event is submitted before this chain finishes, the request is simply
-        enqueued. The `clear_event` method is attached as a "done callback" to each job
+        enqueued. The ``clear_event`` method is attached as a "done callback" to each job
         future, and will re-submit the event once the active chain finishes.
 
         While this could be interpreted as a harsh design choice, it helps prevent many
@@ -81,7 +85,7 @@ class Router[E: Event]:
         Parameters:
             loop:
             workers: number of workers to assign the thread pool when the event loop is
-                     started. Defaults to `None`, which, when passed to
+                     started. Defaults to ``None``, which, when passed to
                      ThreadPoolExecutor, will by default use 5x the number of available
                      processors on the machine (which the docs claim is a reasonable
                      assumption given threads are more commonly leveraged for I/O work
@@ -138,14 +142,14 @@ class Router[E: Event]:
             (Update) The above remark about PathListener's is no longer, and likely never
             was. Varying flag sets under the same endpoint do in fact have a cumulative
             effect, and we need to be able disentangle events accordingly through
-            submitted event's `action` value.
+            submitted event's ``action`` value.
 
         Parameters:
             endpoint:
             callback: callable accepting an event to be executed if when a matching event
                       is received
             pattern: hashable object to be used when filtering event (passed to inherited
-                     `filter(...)`)
+                     ``filter(...)``)
             debounce:
             delay:
         '''
@@ -171,17 +175,17 @@ class Router[E: Event]:
 
     def submit_event(self, event: E, callbacks:list[Callable]|None=None):
         '''
-        Group up and submit all matching callbacks for `event`. All callbacks are ran
+        Group up and submit all matching callbacks for ``event``. All callbacks are ran
         concurrently in their own threads, and this method blocks until all are completed.
 
-        In the outer `submit` context, this blocking method is itself ran in its own
+        In the outer ``submit`` context, this blocking method is itself ran in its own
         thread, and the registered post-callbacks are attached to the completion of this
         function, i.e., the finishing of all callbacks matching provided event.
 
         Note that an event may not match any routes, in which case the method exits early.
         An empty list is returned, and this shows up as the outer future's result. In this
         case, the event is never considered "running," and the non-result picked up in
-        `clear_event` will ensure it exits right away (not even attempting to pop the
+        ``clear_event`` will ensure it exits right away (not even attempting to pop the
         event from the running list, and for now not tracking it in the event log).
         '''
         if callbacks is None:
@@ -252,20 +256,20 @@ class Router[E: Event]:
         fact already active in a frame. If this method were start filtering results while
         the frame is active, and the frame were to finish before all matching callbacks
         were determined, we would be perfectly happy to return all matches, and allow the
-        outer `submit_event` context to run them right away in a newly constructed frame.
+        outer ``submit_event`` context to run them right away in a newly constructed frame.
         The _very_ next thing that gets done is adding this event to the active event
         tracker. Otherwise, matching is performed as usual, and eligible callbacks are
         simply enqueued for the next event frame, which will be checked in the "done"
         callback of the active frame. The logic here should mostly "seal up" any real
         opportunities for error, e.g., a frame ending and popping off elements from
-        `running_events` half-way through their inserting at the end of this method, or
+        ``running_events`` half-way through their inserting at the end of this method, or
         multiple threads checking for matching routes for the same event, and both coming
         away with a non-empty set of matches to run. That last example highlights
         precisely how the single event-frame model works: many threads might be running
         this method at the same time, for the same event (which has fired rapidly), but
         only one should be able to "secure the frame" and begin running the matching
         callbacks. Making the "active frame check" both as late as possible and as close
-        to the event blocking stage in the tracker (in `submit_event`), we make the
+        to the event blocking stage in the tracker (in ``submit_event``), we make the
         ambiguity gap as small as possible (and almost certainly smaller than any
         realistic I/O-bound event duplication).
 
@@ -339,7 +343,7 @@ class Router[E: Event]:
 
     def wait_on_futures(self, futures):
         '''
-        Block until all futures in `futures` are complete. Return collected results as a
+        Block until all futures in ``futures`` are complete. Return collected results as a
         list, and log warnings when a future fails.
         '''
         future_results = []
@@ -395,7 +399,7 @@ class Router[E: Event]:
 
     def extend_listener(self, listener):
         '''
-        Extend a provided Listener object with the Router instance's `listener_kwargs`.
+        Extend a provided Listener object with the Router instance's ``listener_kwargs``.
         '''
         for endpoint, route_tuples in self.routemap.items():
             for route_tuple in route_tuples:
@@ -412,16 +416,16 @@ class Router[E: Event]:
 
     def clear_event(self, event: E, future):
         '''
-        Clear an event. Pops the passed event out of `running_events`, and the request
+        Clear an event. Pops the passed event out of ``running_events``, and the request
         counter is >0, the event is re-submitted.
 
         This method is attached as a "done" callback to the main event wrapping job
-        `submit_event`. The `future` given to this method is one to which it was
+        ``submit_event``. The ``future`` given to this method is one to which it was
         attached as this "done" callback. This method should only be called when that
-        `future` is finished running (or failed). If any jobs were submitted in the
+        ``future`` is finished running (or failed). If any jobs were submitted in the
         wrapper task, the future results here should be non-empty. We use this fact to
         filter out non-work threads that call this method. Because even the
-        `matching_routes` check is threaded, we can't wait to see an event has no work to
+        ``matching_routes`` check is threaded, we can't wait to see an event has no work to
         schedule, and thus can't prevent this method being attached as a "done" callback.
         The check for results from the passed future allows us to know when in fact a
         valid frame has finished, and a resubmission may be on the table.
@@ -460,11 +464,13 @@ class ChainRouter[E: Event](Router[E]):
         '''
         TODO: allow positional insertion in ordered list
         
-        Note: the `routemap` extensions here shouldn't be necessary, since 1) route maps
-        show up only in `matching_routes`, and 2) `matching_routes` is only invoked in
-        `submit_event`, which is totally overwritten for the ChainRouter type. All events
-        are routed through to individual Routers, and which point their route maps are
-        used.
+        .. note::
+
+            the ``routemap`` extensions here shouldn't be necessary, since 1) route maps
+            show up only in ``matching_routes``, and 2) ``matching_routes`` is only
+            invoked in ``submit_event``, which is totally overwritten for the ChainRouter
+            type. All events are routed through to individual Routers, and which point
+            their route maps are used.
         '''
         self.ordered_routers.append(router)
         for endpoint, routelist in router.routemap.items():
@@ -472,7 +478,7 @@ class ChainRouter[E: Event](Router[E]):
 
     def matching_routes(self, event: E, event_time=None):
         '''
-        Colloquial `callbacks` now used as a dict of lists of callbacks, indexed by
+        Colloquial ``callbacks`` now used as a dict of lists of callbacks, indexed by
         router, and only having keys for routers with non-empty callback lists.
         '''
         if event_time is None:
@@ -488,8 +494,8 @@ class ChainRouter[E: Event](Router[E]):
 
     def wait_on_callbacks(self, callbacks, event: E, *args, **kwargs):
         '''
-        Note: relies on order of callbacks dict matching that of `ordered_routers`, which
-        should happen in `matching_routes`
+        Note: relies on order of callbacks dict matching that of ``ordered_routers``, which
+        should happen in ``matching_routes``
         '''
         results = {}
         for router, callback_list in callbacks.items():
@@ -504,14 +510,14 @@ class ChainRouter[E: Event](Router[E]):
 
     def stop_event(self, event):
         '''
-        Sub-routers do not get a "done" callback for their `submit_event` jobs, as they
+        Sub-routers do not get a "done" callback for their ``submit_event`` jobs, as they
         would if they handled their own event submissions. They will, however, set the
         submitted event as "running." We can't rely on sub-routers' "done" callbacks to
         "unset" the running event, because the disconnect between the thread completing
         and execution of that callback may take too long. 
 
         Instead, we explicitly unset the running event for each of the constituent
-        sub-routers at the _same time_ we handle the ChainRouter's notion of event's
+        sub-routers at the *same time* we handle the ChainRouter's notion of event's
         ending.
         '''
         event_idx = self.event_index(event)

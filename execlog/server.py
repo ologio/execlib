@@ -6,11 +6,12 @@ and job execution (routing and listening). Routers and Listeners can be started 
 managed independently, but a single Server instance can house, start, and shutdown
 listeners in one place.
 
-TODO: as it stands, the Server requires address and port details, effectively needing one
-of the HTTP items (static file serving or livereloading) to be initialized appropriately.
-But there is a clear use case for just managing disparate Routers and their associated
-Listeners. Should perhaps separate this "grouped listener" into another object, or just
-make the Server definition more flexible.
+.. admonition:: todo
+    As it stands, the Server requires address and port details, effectively needing one
+    of the HTTP items (static file serving or livereloading) to be initialized appropriately.
+    But there is a clear use case for just managing disparate Routers and their associated
+    Listeners. Should perhaps separate this "grouped listener" into another object, or just
+    make the Server definition more flexible.
 '''
 import re
 import asyncio
@@ -32,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 class Server:
     '''
-    Server class. Wraps up a development static file server and live reloader.
+    Wraps up a development static file server and live reloader.
     '''
     def __init__(
         self,
@@ -89,9 +90,9 @@ class Server:
         endpoint (if livereload enabled).
 
         Note that, when present, the livereload endpoint is registered first, as the order
-        in which routes are defined matters for FastAPI apps. This allows `/livereload` to
+        in which routes are defined matters for FastAPI apps. This allows ``/livereload`` to
         behave appropriately, even when remounting the root if serving static files
-        (which, if done in the opposite order, would "eat up" the `/livereload` endpoint).
+        (which, if done in the opposite order, would "eat up" the ``/livereload`` endpoint).
         '''
         # enable propagation and clear handlers for uvicorn internal loggers;
         # allows logging messages to propagate to my root logger
@@ -149,33 +150,35 @@ class Server:
         '''
         Start the server.
 
-        Note: Design
+        .. admonition:: Design
+
             This method takes on some extra complexity in order to ensure the blocking
-            Watcher and FastAPI's event loop play nicely together. The Watcher's `start()`
-            method runs a blocking call to INotify's `read()`, which obviously cannot be
+            Watcher and FastAPI's event loop play nicely together. The Watcher's ``start()``
+            method runs a blocking call to INotify's ``read()``, which obviously cannot be
             started directly here in the main thread. Here we have a few viable options:
 
-            1. Simply wrap the Watcher's `start` call in a separate thread, e.g.,
+            1. Simply wrap the Watcher's ``start`` call in a separate thread, e.g.,
 
-               ```py
-               watcher_start = partial(self.watcher.start, loop=loop)
-               threading.Thread(target=self.watcher.start, kwargs={'loop': loop}).start()
-               ```
+               .. code-block:: python
+
+                   watcher_start = partial(self.watcher.start, loop=loop)
+                   threading.Thread(target=self.watcher.start, kwargs={'loop': loop}).start()
 
                This works just fine, and the watcher's registered async callbacks can
                still use the passed event loop to get messages sent back to open WebSocket
                clients.
-            2. Run the Watcher's `start` inside a thread managed by event loop via
-               `loop.run_in_executor`:
 
-               ```py
-               loop.run_in_executor(None, partial(self.watcher.start, loop=loop))
-               ```
+            2. Run the Watcher's ``start`` inside a thread managed by event loop via
+               ``loop.run_in_executor``:
+
+               .. code-block:: python
+
+                  loop.run_in_executor(None, partial(self.watcher.start, loop=loop))
 
                Given that this just runs the target method in a separate thread, it's very
                similar to option #1. It doesn't even make the outer loop context available
                to the Watcher, meaning we still have to pass this loop explicitly to the
-               `start` method. The only benefit here (I think? there may actually be no
+               ``start`` method. The only benefit here (I think? there may actually be no
                difference) is that it keeps things under one loop, which can be beneficial
                for shutdown.
 
@@ -186,12 +189,12 @@ class Server:
 
             Once the watcher is started, we can kick off the FastAPI server (which may be
             serving static files, handling livereload WS connections, or both). We
-            provide `uvicorn` access to the manually created `asyncio` loop used to the
+            provide ``uvicorn`` access to the manually created ``asyncio`` loop used to the
             run the Watcher (in a thread, that is), since that loop is made available to
-            the `Watcher._event_loop` method. This ultimately allows async methods to be
+            the ``Watcher._event_loop`` method. This ultimately allows async methods to be
             registered as callbacks to the Watcher and be ran in a managed loop. In this
             case, that loop is managed by FastAPI, which keeps things consistent: the
-            Watcher can call `loop.call_soon_threadsafe` to queue up a FastAPI-based
+            Watcher can call ``loop.call_soon_threadsafe`` to queue up a FastAPI-based
             response _in the same FastAPI event loop_, despite the trigger for that
             response having originated from a separate thread (i.e., where the watcher is
             started). This works smoothly, and keeps the primary server's event loop from
@@ -199,14 +202,15 @@ class Server:
 
             Note that, due to the delicate Watcher behavior, we must perform a shutdown
             explicitly in order for things to be handled gracefully. This is done in the
-            server setup step, where we ensure FastAPI calls `watcher.stop()` during its
+            server setup step, where we ensure FastAPI calls ``watcher.stop()`` during its
             shutdown process.
 
-        Note: on event loop management
-            The uvicorn server is ran with `run_until_complete`, intended as a
+        .. admonition:: on event loop management
+
+            The uvicorn server is ran with ``run_until_complete``, intended as a
             long-running process to eventually be interrupted or manually disrupted with a
-            call to `shutdown()`. The `shutdown` call attempts to gracefully shutdown the
-            uvicorn process by setting a `should_exit` flag. Upon successful shutdown, the
+            call to ``shutdown()``. The ``shutdown`` call attempts to gracefully shutdown the
+            uvicorn process by setting a ``should_exit`` flag. Upon successful shutdown, the
             server task will be considered complete, and we can then manually close the
             loop following the interruption. So a shutdown call (which is also attached as
             a lifespan shutdown callback for the FastAPI object) will disable listeners
@@ -234,39 +238,41 @@ class Server:
         '''
         Additional shutdown handling after the FastAPI event loop receives an interrupt.
 
-        This is attached as a "shutdown" callback when creating the FastAPI instance,
-        which generally appears to hear interrupts and propagate them through.
+        .. admonition:: Usage
 
-        This method can also be invoked programmatically, such as from a thread not
-        handling the main event loop. Note that either of the following shutdown
-        approaches of the Uvicorn server do not appear to work well in this case; they
-        both stall the calling thread indefinitely (in the second case, when waiting on
-        the shutdown result), or simply don't shutdown the server (in the first). Only
-        setting `should_exit` and allowing for a graceful internal shutdown appears to
-        both 1) handle this gracefully, and 2) shut down the server at all.
+            This is attached as a "shutdown" callback when creating the FastAPI instance,
+            which generally appears to hear interrupts and propagate them through.
 
-        ```
-        self.loop.call_soon_threadsafe(self.userver.shutdown)
-            
-        # OR #
+            This method can also be invoked programmatically, such as from a thread not
+            handling the main event loop. Note that either of the following shutdown
+            approaches of the Uvicorn server do not appear to work well in this case; they
+            both stall the calling thread indefinitely (in the second case, when waiting on
+            the shutdown result), or simply don't shutdown the server (in the first). Only
+            setting ``should_exit`` and allowing for a graceful internal shutdown appears to
+            both 1) handle this gracefully, and 2) shut down the server at all.
 
-        future = asyncio.run_coroutine_threadsafe(self.userver.shutdown(), self.loop)
+            .. code-block:: python
 
-        # and wait for shutdown
-        future.result()
-        ```
+                self.loop.call_soon_threadsafe(self.userver.shutdown)
+                    
+                # OR #
 
-        The shutdown process goes as follows:
+                future = asyncio.run_coroutine_threadsafe(self.userver.shutdown(), self.loop)
 
-        1. Stop any managed listeners: close out listener loops and/or thread pools by
-           calling `stop()` on each of the managed listeners. This prioritizes their
-           closure so that no events can make their way into the queue.
-        2. Gracefully shut down the wrapper Uvicorn server. This is the process that
-           starts the FastAPI server instance; set the `should_exit` flag.
+                # and wait for shutdown
+                future.result()
 
-        If this completes successfully, in the thread where Uvicorn was started the server
-        task should be considered "completed," at which point the event loop can be closed
-        successfully.
+            The shutdown process goes as follows:
+
+            1. Stop any managed listeners: close out listener loops and/or thread pools by
+               calling ``stop()`` on each of the managed listeners. This prioritizes their
+               closure so that no events can make their way into the queue.
+            2. Gracefully shut down the wrapper Uvicorn server. This is the process that
+               starts the FastAPI server instance; set the ``should_exit`` flag.
+
+            If this completes successfully, in the thread where Uvicorn was started the server
+            task should be considered "completed," at which point the event loop can be closed
+            successfully.
         '''
         logger.info("Shutting down server...")
 

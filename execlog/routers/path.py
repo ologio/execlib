@@ -24,7 +24,7 @@ class PathRouter(Router[FileEvent]):
     ):
         '''
         Parameters:
-            path:  Path (directory) to watch with `inotify`
+            path:  Path (directory) to watch with ``inotify``
             func:  Callback to run if FS event target matches glob
             glob:  Relative glob pattern to match files in provided path. The FS event's
                    filename must match this pattern for the callback to queued. (Default:
@@ -32,7 +32,7 @@ class PathRouter(Router[FileEvent]):
             debounce:
             delay:
             listener_kwargs: Additional params for associated listener "listen" routes.
-                             See `PathListener.listen`.
+                             See ``PathListener.listen``.
         '''
         super().register(
             #endpoint=Path(path),
@@ -47,14 +47,14 @@ class PathRouter(Router[FileEvent]):
     def filter(self, event, glob, **listen_kwargs) -> bool:
         '''
         Note:
-            If `handle_events` is called externally, note that this loop will block in the
+            If ``handle_events`` is called externally, note that this loop will block in the
             calling thread until the jobs have been submitted. It will _not_ block until
             jobs have completed, however, as a list of futures is returned. The calling
-            Watcher instance may have already been started, in which case `run()` will
+            Watcher instance may have already been started, in which case ``run()`` will
             already be executing in a separate thread. Calling this method externally will
             not interfere with this loop insofar as it adds jobs to the same thread pool.
 
-            Because this method only submits jobs associated with the provided `events`,
+            Because this method only submits jobs associated with the provided ``events``,
             the calling thread can await the returned list of futures and be confident
             that top-level callbacks associated with these file events have completed. Do
             note that, if the Watcher has already been started, any propagating file

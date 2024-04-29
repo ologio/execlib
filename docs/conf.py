@@ -15,12 +15,21 @@ author = 'Sam Griesemer'
 
 extensions = [
     "sphinx.ext.autodoc",
-    "sphinx.ext.autosummary",
-    "sphinx.ext.viewcode",
-    "myst_parser",
+    "sphinx.ext.autosummary", # enables a directive to be specified manually that gathers
+                              # module/object summary details in a table
+    "sphinx.ext.viewcode",    # allow viewing source in the HTML pages
+    "myst_parser",            # only really applies to manual docs; docstrings still need RST-like
+    "sphinx.ext.napoleon",    # enables Google-style docstring formats
+    "sphinx_autodoc_typehints", # external extension that allows arg types to be inferred by type hints
 ]
 autosummary_generate = True
 autosummary_imported_members = True
+
+# include __init__ definitions in autodoc
+autodoc_default_options = {
+    'special-members': '__init__',
+}
+#smartquotes = True
 
 templates_path = ['_templates']
 exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']

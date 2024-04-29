@@ -15,6 +15,7 @@ sphinx
 sphinx-togglebutton
 furo
 myst-parser
+sphinx-autodoc-typehints
 
 # -- testing ---
 pytest

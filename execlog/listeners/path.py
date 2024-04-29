@@ -23,7 +23,7 @@ class PathListener(Listener[FileEvent]):
         Note:
             Due to the nature of INotify, you cannot watch the same path with two
             separate flag settings (without creating a new INotify instance). Under the
-            same instance, calling `add_watch` for an already watched path location will
+            same instance, calling ``add_watch`` for an already watched path location will
             simply return the watch descriptor already associated with that location (and
             may update the flags to whatever is passed). However, this location will only
             ever be "watched once" by a given INotify instance, so keep this in mind if
@@ -75,8 +75,8 @@ class PathListener(Listener[FileEvent]):
         remove=False,
     ):
         '''
-        Recursively watch directories under path/lead, using `path` as the registered
-        base. Specifying `lead` gives one control over the subdirectory on which to
+        Recursively watch directories under path/lead, using ``path`` as the registered
+        base. Specifying ``lead`` gives one control over the subdirectory on which to
         recurse; the "origin" the recursion base point.
 
         Note: on renamed/moved directories
@@ -88,9 +88,9 @@ class PathListener(Listener[FileEvent]):
             the router. Explicitly re-watching the renamed directory (and any
             subdirectories) will also return that existing watch descriptor. Thus, this
             method can just be directly called for directory moves/renames, and WDs in the
-            `watchmap` will just be used as expected. (One should also call the method
-            using the old lead and set `remove=True` to remove old tuples out of the
-            `watchmap`. Note that this doesn't remove the existing watches from iNotify,
+            ``watchmap`` will just be used as expected. (One should also call the method
+            using the old lead and set ``remove=True`` to remove old tuples out of the
+            ``watchmap``. Note that this doesn't remove the existing watches from iNotify,
             just their tracked tuples.)
         '''
         if lead is None:
@@ -111,11 +111,11 @@ class PathListener(Listener[FileEvent]):
         flags=None,
     ):
         '''
-        Listen to file events occurring under a provided path, optionally only events
-        matching provided iNotify flags.
+        Listen to file events occurring under a provided path, optionally excluding those
+        not matching the provided iNotify flags.
 
         Parameters:
-            path:  Path (directory) to watch with `inotify`
+            path:  Path (directory) to watch with ``inotify``
             flags: inotify_simple flags matching FS event types allowed to trigger the
                    callback
         '''
@@ -137,10 +137,12 @@ class PathListener(Listener[FileEvent]):
 
     def run(self):
         '''
+        Start the (blocking) iNotify event loop
+
         Note: On usage
-            `start()` is a blocking call. This will hog your main thread if not properly
+            ``start()`` is a blocking call. This will hog your main thread if not properly
             threaded. If handling this manually in your outer context, you will also need
-            to make sure to call `.stop()`
+            to make sure to call ``.stop()``
         '''
         self.started = True
         logger.info(f'Starting listener for {len(self.watchmap)} paths')
@@ -168,26 +170,30 @@ class PathListener(Listener[FileEvent]):
 
     def update_moved_from(self, path, lead):
         '''
-        Update directories on `MOVED_FROM` events. This method gets the existing WD,
-        removes the old path associated with that WD from the `watchmap` (preventing
-        events originating from this old path when the new path, which has the _same WD_,
-        receives an inotify event), and queues the (WD, base-path) tuple to be matched
-        later in a `MOVED_TO` handler.
+        Update directories on ``MOVED_FROM`` events. 
 
-        This method isn't a part of a `MOVED_TO` handler because it may be called without
-        ever having a `MOVED_TO` that follows up. We respond right away in `handle_events`
-        to `MOVED_FROM` events, keeping the `watchmap` in sync, regardless of whether we
-        can expect a `MOVED_TO` to sweep through after the fact.
+        .. admonition:: Additional details
 
-        Note that the `lead` is unique for a given WD and base path. WDs are unique for
-        filepaths, but inotify uses the same WD for new directories when they experience a
-        rename (it's the same inode). However, during such a transition, the `watchmap`
-        can see two different entries for the same WD and basepath: the old tracked path,
-        and the newly named one (again, still the same inode). So: this method can be
-        called 1) directly from `MOVED_FROM` events, preemptively wiping the old path from
-        the tracked dicts, or 2) during handling of a `MOVED_TO` event (in case we don't
-        allow `MOVED_FROM` events, for instance), given both the new and old paths can be
-        seen in the `watchmap`.
+            This method gets the existing WD, removes the old path associated with that WD
+            from the ``watchmap`` (preventing events originating from this old path when the
+            new path, which has the *same WD*, receives an inotify event), and queues the (WD,
+            base path) tuple to be matched later in a ``MOVED_TO`` handler.
+
+            This method isn't a part of a ``MOVED_TO`` handler because it may be called
+            without ever having a ``MOVED_TO`` that follows up. We respond right away in
+            ``handle_events`` to ``MOVED_FROM`` events, keeping the ``watchmap`` in sync,
+            regardless of whether we can expect a ``MOVED_TO`` to sweep through after the
+            fact.
+
+            Note that the ``lead`` is unique for a given WD and base path. WDs are unique for
+            filepaths, but inotify uses the same WD for new directories when they experience a
+            rename (it's the same inode). However, during such a transition, the ``watchmap``
+            can see two different entries for the same WD and basepath: the old tracked path,
+            and the newly named one (again, still the same inode). So: this method can be
+            called 1) directly from ``MOVED_FROM`` events, preemptively wiping the old path
+            from the tracked dicts, or 2) during handling of a ``MOVED_TO`` event (in case we
+            don't allow ``MOVED_FROM`` events, for instance), given both the new and old paths
+            can be seen in the ``watchmap``.
         '''
         wd = self.pathmap.get(Path(path, lead))
         logger.debug(f'> MOVED_FROM update, [{Path(path, lead)}] in pathmap as [{wd}]')
@@ -202,46 +208,47 @@ class PathListener(Listener[FileEvent]):
         Construct synthetic MOVED events. Events are constructed from the path's WD. If
         the provided path is not watched, an empty list of events is returned.
 
-        Note: Design details
-            This method is nuanced. It can only be called once a `MOVED_TO` occurs, since
-            we can't act on a `MOVED_FROM` (we don't know the new target location to look
+        .. admonition:: Design details
+
+            This method is nuanced. It can only be called once a ``MOVED_TO`` occurs, since
+            we can't act on a ``MOVED_FROM`` (we don't know the new target location to look
             so we can send file events). When called, we first look for the path's WD in
-            the `pathmap`. We then check if this WD points to more than one entry with the
+            the ``pathmap``. We then check if this WD points to more than one entry with the
             same base path (WDs are unique to the path; under the same WD, the same base
             path implies the same lead). If so, we know one is the outdated path, and we
-            push the outdated lead to `update_moved_from`. This would be evidence that the
-            `MOVED_FROM` event for the move operation wasn't handled in the main event
+            push the outdated lead to ``update_moved_from``. This would be evidence that the
+            ``MOVED_FROM`` event for the move operation wasn't handled in the main event
             handling loop. We then check for unmatched move-froms, which should provide
-            any renamed directories, regardless of whether `MOVED_FROM`s were allowed, to
-            be detected. Finally, the appropriate `MOVED_FROM`s and `MOVED_TO`s are
+            any renamed directories, regardless of whether ``MOVED_FROMs`` were allowed, to
+            be detected. Finally, the appropriate ``MOVED_FROMs`` and ``MOVED_TOs`` are
             handled. To ensure only the correct events match upon handling, we do the
             following:
 
-            - First, if a `MOVED_FROM` path is not available, we assume it wasn't queued
+            - First, if a ``MOVED_FROM`` path is not available, we assume it wasn't queued
               by the event and not a watched flag. Given we by default ensure MOVED events
               are tracked, regardless of listened paths, this shouldn't be possible, but
               if this standard were to change, we won't recursively respond to
-              `MOVED_FROM`s. This will mean that we can't prevent events from being
+              ``MOVED_FROMs``. This will mean that we can't prevent events from being
               matched to old directory names (we've rooted out the ability to tell when
-              they've changed), and thus can't remove them from the `watchpath`
+              they've changed), and thus can't remove them from the ``watchpath``
               accordingly. (One functional caveat here: this MOVED_TO handling method
-              explicitly calls `updated_moved_from`, which should clean up lingering
+              explicitly calls ``updated_moved_from``, which should clean up lingering
               renamed path targets. This happens recursively if we're watching MOVED_TOs,
-              so even if standards do change and you don't watch `MOVED_FROM`s, you'll
+              so even if standards do change and you don't watch ``MOVED_FROMs``, you'll
               still get clean up for free due to the robustness of this method.
-            - If a `MOVED_FROM` lead is found, either due to an inferred matching base
-              lingering in the `watchmap` or through previously handled `MOVED_FROM`
-              response, add this path/lead back to the `watchmap`, remove the new
-              path/lead, and call `handle_events` for the synthetic `MOVED_FROM` events
+            - If a ``MOVED_FROM`` lead is found, either due to an inferred matching base
+              lingering in the ``watchmap`` or through previously handled ``MOVED_FROM``
+              response, add this path/lead back to the ``watchmap``, remove the new
+              path/lead, and call ``handle_events`` for the synthetic ``MOVED_FROM`` events
               across files and directories.  Once finished, again remove the old path/lead
               and add back the new one.
-            - Submit `MOVED_TO` events to `handle_events`. This will recursively propagate for
-              subdirectories, each submitting their own `update_moved_to` call, resetting
+            - Submit ``MOVED_TO`` events to ``handle_events``. This will recursively propagate for
+              subdirectories, each submitting their own ``update_moved_to`` call, resetting
               its own outdated leads and changing them back, all the way down to the
               bottom. 
 
-            In the odd case where `MOVED_FROM` is registered but not `MOVED_TO`, you will
-            simply remove the directory causing a `MOVED_FROM` event, with no recursive
+            In the odd case where ``MOVED_FROM`` is registered but not ``MOVED_TO``, you will
+            simply remove the directory causing a ``MOVED_FROM`` event, with no recursive
             propagation. This should likely be changed.
         '''
         fullpath = Path(path, lead)
@@ -260,7 +267,7 @@ class PathListener(Listener[FileEvent]):
             self.update_moved_from(matching_base, old_lead)
 
         # explicit queries for files & dirs faster (tested) than filtering a single query
-        # using `Path.is_dir`; handle files, then subdirectories
+        # using ``Path.is_dir``; handle files, then subdirectories
         moved_from_events = []
         moved_to_events = []
         for file in util.path.iter_glob_paths('*', fullpath, no_dir=True):
@@ -292,14 +299,14 @@ class PathListener(Listener[FileEvent]):
     def handle_events(self, events):
         '''
         Note:
-            If `handle_events` is called externally, note that this loop will block in the
+            If ``handle_events`` is called externally, note that this loop will block in the
             calling thread until the jobs have been submitted. It will _not_ block until
             jobs have completed, however, as a list of futures is returned. The calling
-            Watcher instance may have already been started, in which case `run()` will
+            Watcher instance may have already been started, in which case ``run()`` will
             already be executing in a separate thread. Calling this method externally will
             not interfere with this loop insofar as it adds jobs to the same thread pool.
 
-            Because this method only submits jobs associated with the provided `events`,
+            Because this method only submits jobs associated with the provided ``events``,
             the calling thread can await the returned list of futures and be confident
             that top-level callbacks associated with these file events have completed. Do
             note that, if the Watcher has already been started, any propagating file
@@ -365,12 +372,12 @@ class PathListener(Listener[FileEvent]):
             main process exit before final tasks can be submitted, resulting in
             RuntimeErrors that cannot "schedule new futures after interpreter shutdown."
             So you either need to ensure the final tasks are scheduled before calling
-            `stop()` (this means more than just a `submit()` call; it must have actually
-            propagated through to `submit_callback` and reached `thread_pool.submit`) to
+            ``stop()`` (this means more than just a ``submit()`` call; it must have actually
+            propagated through to ``submit_callback`` and reached ``thread_pool.submit``) to
             allow them to be handled automatically prior to shutdown, or manually wait on
             their futures to complete. Otherwise, thread pool shutdown will occur, and
             they'll still be making their way out of the queue only to reach the
-            `thread_pool.submit` after it's had its final boarding call.
+            ``thread_pool.submit`` after it's had its final boarding call.
         '''
         logger.info("Stopping listener...")
 

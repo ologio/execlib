@@ -34,24 +34,25 @@ class Handler(WebSocketEndpoint):
     '''
     Subclasses WebSocketEndpoint to be attached to live reload endpoints.
 
-    Note: Reload model
+    .. admonition:: Reload model
+
         - Served HTML files are generated from templates that include livereload JS and the
           target livereload server (port manually set prior to site build).
         - When pages are visited (be they served from NGINX or via the development
           server), the livereload.js attempts to connect to the known livereload WS
           endpoint.
-        - FastAPI routes the request to _this_ endpoint, and `on_connect` is called.
+        - FastAPI routes the request to _this_ endpoint, and ``on_connect`` is called.
         - Upon successful connection, the livereload JS client sends a "hello" message.
           This is picked up as the first post-acceptance message, and captured by the
-          `on_receive` method.
-        - `on_receive` subsequently initiates a formal handshake, sending back a "hello"
+          ``on_receive`` method.
+        - ``on_receive`` subsequently initiates a formal handshake, sending back a "hello"
           command and waiting the "info" command from the client.
         - If the "info" command is received successfully and contains the requesting
           page's URL, the handshake completes and the websocket is added to the class'
-          `live_clients` tracker.
+          ``live_clients`` tracker.
         - Later, when a file in a watch path of the server's watcher is _modified_,
-          `reload_clients` will be called from within the originating server's event loop,
-          and pass in the FS event associated with the file change. `client_reload_wrap`
+          ``reload_clients`` will be called from within the originating server's event loop,
+          and pass in the FS event associated with the file change. ``client_reload_wrap``
           is used to wrap a boolean checker method for whether or not to reload clients
           given the FS event.
 
@@ -66,10 +67,11 @@ class Handler(WebSocketEndpoint):
 
     async def on_receive(self, websocket, data):
         '''
-        Note: On page names
+        .. admonition:: On page names
+
             When websockets connect, they simply communicate the exact URL from the origin
             page. The websocket is then indexed to possibly variable page names (often
-            without an `.html` suffix, but occasionally with). The `client_reload_wrap` is
+            without an ``.html`` suffix, but occasionally with). The ``client_reload_wrap`` is
             then responsible for taking this client page name and normalizing it to be
             matched with full file names (i.e., suffix always included).
         '''

@@ -11,4 +11,5 @@ FileEvent = namedtuple(
     'FileEvent',
     ['endpoint', 'name', 'action'],
     defaults=[None, None, None],
+    # action is 32bit flag mask
 )

@@ -7,6 +7,7 @@ managed independently, but a single Server instance can house, start, and shutdo
 listeners in one place.
 
 .. admonition:: todo
+
     As it stands, the Server requires address and port details, effectively needing one
     of the HTTP items (static file serving or livereloading) to be initialized appropriately.
     But there is a clear use case for just managing disparate Routers and their associated
@@ -14,6 +15,7 @@ listeners in one place.
     make the Server definition more flexible.
 '''
 import re
+import signal
 import asyncio
 import logging
 import threading
@@ -290,3 +292,36 @@ class Server:
 
             self.loop.call_soon_threadsafe(set_should_exit)
 
+
+class ListenerServer:
+    '''
+    Server abstraction to handle disparate listeners.
+    '''
+    def __init__(
+        self,
+        managed_listeners : list | None = None,
+    ):
+        if managed_listeners is None:
+            managed_listeners = []
+
+        self.managed_listeners = managed_listeners
+
+    def start(self):
+        signal.signal(signal.SIGINT,  lambda s,f: self.shutdown())
+        signal.signal(signal.SIGTERM, lambda s,f: self.shutdown())
+
+        for listener in self.managed_listeners:
+            #loop.run_in_executor(None, partial(self.listener.start, loop=loop))
+            if not listener.started:
+                listener.start()
+
+        for listener in self.managed_listeners:
+            listener.join()
+
+    def shutdown(self):
+        # stop attached auxiliary listeners, both internal & external
+        if self.managed_listeners:
+            logger.info(f"Stopping {len(self.managed_listeners)} listeners...")
+
+            for listener in self.managed_listeners:
+                listener.stop()

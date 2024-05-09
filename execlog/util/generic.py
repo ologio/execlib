@@ -5,6 +5,10 @@ import colorama
 from colorama import Fore, Back, Style
 
 
+def color_text(text, *colorama_args):
+    return f"{''.join(colorama_args)}{text}{Style.RESET_ALL}"
+
+
 class ColorFormatter(logging.Formatter):
     _format = '%(levelname)-8s :: %(name)s %(message)s'
     colorama.init(autoreset=True)

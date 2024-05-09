@@ -5,9 +5,11 @@ import logging
 from pathlib import Path
 from collections import defaultdict
 
+from colorama import Fore, Back, Style
 from inotify_simple import INotify, Event as iEvent, flags as iflags, masks as imasks
 
 from execlog import util
+from execlog.util.generic import color_text
 from execlog.event import FileEvent
 from execlog.listener import Listener
 
@@ -119,7 +121,8 @@ class PathListener(Listener[FileEvent]):
             flags: inotify_simple flags matching FS event types allowed to trigger the
                    callback
         '''
-        path = Path(path)
+        #path = Path(path)
+        path = str(path)
 
         if flags is None:
             flags = iflags.CREATE | iflags.DELETE | iflags.MODIFY | iflags.DELETE_SELF | iflags.MOVED_TO
@@ -145,13 +148,23 @@ class PathListener(Listener[FileEvent]):
             to make sure to call ``.stop()``
         '''
         self.started = True
-        logger.info(f'Starting listener for {len(self.watchmap)} paths')
+        logger.info(
+            color_text(
+                f'Starting listener for {len(self.watchmap)} paths',
+                Fore.GREEN,
+            )
+        )
 
         for path, flags in self.canonmap.values():
             logger.info(f'> Listening on path {path} for flags {iflags.from_mask(flags)}')
 
             for (callback, pattern, debounce, delay, *_) in self.router.routemap[path]:
-                logger.info(f'| > {pattern} -> {callback.__name__} (debounce {debounce}ms, delay {delay}ms)')
+                logger.info(
+                    color_text(
+                        f'| > {pattern} -> {callback.__name__} (debounce {debounce}ms, delay {delay}ms)',
+                        Style.DIM,
+                    )
+                )
 
         while True:
             rlist, _, _ = select.select(
@@ -300,7 +313,7 @@ class PathListener(Listener[FileEvent]):
         '''
         Note:
             If ``handle_events`` is called externally, note that this loop will block in the
-            calling thread until the jobs have been submitted. It will _not_ block until
+            calling thread until the jobs have been submitted. It will *not* block until
             jobs have completed, however, as a list of futures is returned. The calling
             Watcher instance may have already been started, in which case ``run()`` will
             already be executing in a separate thread. Calling this method externally will

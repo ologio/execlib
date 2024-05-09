@@ -116,6 +116,29 @@ pages:
 
 Nice syntax cheatsheet [here][4]
 
+General docstring structure should be structured as follows:
+
+```python
+def example_function(a, b):
+    '''
+    Minimal function description. (either first sentence or line; gets used in
+    autosummaries)
+
+    Additional exposition, unwrapped by admonitions.
+
+    .. admonition:: Admonition description
+        Indented content, code blocks, lists, etc
+
+    Parameters:
+        a: a's description
+        b: b's description
+
+    Returns:
+        <return-type>: Description of return value
+    '''
+    ...
+```
+
 
 [1]: https://pradyunsg.me/furo/
 [2]: https://www.sphinx-doc.org/en/master/man/sphinx-apidoc.html

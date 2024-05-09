@@ -8,14 +8,15 @@ import inspect
 import traceback 
 import threading
 from pathlib import Path
-from typing import Callable
-from functools import partial
+from typing import Any, Callable
 from colorama import Fore, Style
 from collections import defaultdict
+from functools import partial, update_wrapper
 from concurrent.futures import ThreadPoolExecutor, wait, as_completed
 
 from tqdm.auto import tqdm
 
+from execlog.util.generic import color_text
 from execlog.event import Event
 from execlog.listener import Listener
 
@@ -156,7 +157,7 @@ class Router[E: Event]:
         route_tuple = (callback, pattern, debounce, delay, listener_kwargs)
         self.routemap[endpoint].append(route_tuple)
 
-    def submit(self, events:E | list[E], callbacks:list[Callable]|None=None):
+    def submit(self, events: E | list[E], callbacks: list[Callable] | None = None):
         '''
         Handle a list of events. Each event is matched against the registered callbacks,
         and those callbacks are ran concurrently (be it via a thread pool or an asyncio
@@ -173,7 +174,7 @@ class Router[E: Event]:
 
         return futures
 
-    def submit_event(self, event: E, callbacks:list[Callable]|None=None):
+    def submit_event(self, event: E, callbacks: list[Callable] | None = None):
         '''
         Group up and submit all matching callbacks for ``event``. All callbacks are ran
         concurrently in their own threads, and this method blocks until all are completed.
@@ -294,6 +295,15 @@ class Router[E: Event]:
                 # reject event
                 continue
 
+            callback_name = str(callback)
+            if hasattr(callback, '__name__'):
+                callback_name = callback.__name__
+
+            name_text     = color_text(name,               Fore.BLUE)
+            pattern_text  = color_text(pattern,            Fore.BLUE)
+            endpoint_text = color_text(endpoint,           Fore.BLUE)
+            callback_text = color_text(callback_name[:50], Fore.BLUE)
+
             if self.filter(event, pattern, **listen_kwargs):
                 # note that delayed callbacks are added
                 matches.append(self.get_delayed_callback(callback, delay, index))
@@ -301,19 +311,14 @@ class Router[E: Event]:
                 # set next debounce 
                 self.next_allowed_time[index] = event_time + debounce
 
-                match_text = Style.BRIGHT + Fore.GREEN + 'matched' + Fore.RESET
-
-                callback_name = str(callback)
-                if hasattr(callback, '__name__'):
-                    callback_name = callback.__name__
-
+                match_text = color_text('matched', Style.BRIGHT, Fore.GREEN)
                 logger.info(
-                    f'Event [{name}] {match_text} [{pattern}] under [{endpoint}] for [{callback_name}]'
+                    f'Event [{name_text}] {match_text} [{pattern_text}] under [{endpoint_text}] for [{callback_text}]'
                 )
             else:
-                match_text = Style.BRIGHT + Fore.RED + 'rejected' + Fore.RESET
+                match_text = color_text('rejected', Style.BRIGHT, Fore.RED)
                 logger.debug(
-                    f'Event [{name}] {match_text} against [{pattern}] under [{endpoint}] for [{callback.__name__}]'
+                    f'Event [{name_text}] {match_text} against [{pattern_text}] under [{endpoint_text}] for [{callback_text}]'
                 )
 
         return matches
@@ -372,7 +377,7 @@ class Router[E: Event]:
 
     def filter(self, event: E, pattern, **listen_kwargs) -> bool:
         '''
-        Determine if a given event matches the providedpattern
+        Determine if a given event matches the provided pattern
 
         Parameters:
             event:
@@ -546,3 +551,141 @@ def handle_exception(future):
     except Exception as e:
         print(f"Exception occurred: {e}")
         traceback.print_exc()
+
+
+# RouterBuilder
+def route(router, route_group, **route_kwargs):
+    def decorator(f):
+        f._route_data = (router, route_group, route_kwargs)
+        return f
+
+    return decorator
+
+class RouteRegistryMeta(type):
+    '''
+    Metaclass handling route registry at the class level.
+    '''
+    def __new__(cls, name, bases, attrs):
+        route_registry = defaultdict(lambda: defaultdict(list))
+
+        def register_route(method):
+            nonlocal route_registry
+
+            if hasattr(method, '_route_data'):
+                router, route_group, route_kwargs = method._route_data
+                route_registry[router][route_group].append((method, route_kwargs))
+
+        # add registered superclass methods; iterate over bases (usually just one), then
+        # that base's chain down (reversed), then methods from each subclass
+        for base in bases:
+            for _class in reversed(base.mro()):
+                methods = inspect.getmembers(_class, predicate=inspect.isfunction)
+                for _, method in methods:
+                    register_route(method)
+
+        # add final registered formats for the current class, overwriting any found in
+        # superclass chain
+        for attr_name, attr_value in attrs.items():
+            register_route(attr_value)
+
+        attrs['route_registry'] = route_registry
+
+        return super().__new__(cls, name, bases, attrs)
+
+class RouterBuilder(metaclass=RouteRegistryMeta):
+    '''
+    Builds a (Chain)Router using attached methods and passed options.
+
+    This class can be subtyped and desired router methods attached using the provided
+    ``route`` decorator. This facilitates two separate grouping mechanisms:
+
+    1. Group methods by frame (i.e., attach to the same router in a chain router)
+    2. Group by registry equivalence (i.e, within a frame, registered with the same
+       parameters)
+
+    These groups are indicated by the following collation syntax:
+
+    .. code-block:: python
+
+        @route('<router>/<frame>', '<route-group>', **route_kwargs)
+        def method(...):
+            ...
+
+    and the following is a specific example:
+
+    .. code-block:: python
+
+        @route(router='convert', route_group='file', debounce=500)
+        def file_convert_1(self, event):
+            ...
+
+    which will attach the method to the "convert" router (or "frame" in a chain router
+    context) using parameters (endpoint, pattern, and other keyword args) associated with
+    the "file" route group (as indexed by the ``register_map`` provided on instantiation)
+    with the ``debounce`` route keyword (which will override the same keyword values if
+    set in the route group). Note that the exact same ``@route`` signature can be used for
+    an arbitrary number of methods to be handled in parallel by the associated Router.
+    
+    Note that there is one reserved route group keyword: "post," for post callbacks.
+    Multiple post-callbacks for a particular router can be specified with the same ID
+    syntax above.
+
+    .. admonition:: Map structures
+
+        The following is a more intuitive breakdown of the maps involved, provided and
+        computed on instantiation:
+
+        .. code-block:: python
+            
+            # provided
+            register_map[<router-name>] -> ( Router, { <type>: ( ( endpoint, pattern ), **kwargs ) } )
+
+            # computed
+            routers[<router-name>][<type>] -> [... <methods> ...]
+
+    .. admonition:: TODO
+        
+        Consider "flattening" the ``register_map`` to be indexed only by ``<type>``,
+        effectively forcing the 2nd grouping mechanism to be provided here (while the 1st
+        is handled by the method registration within the body of the class). This properly
+        separates the group mechanisms and is a bit more elegant, but reduces the
+        flexibility a bit (possibly in a good way, though).
+    '''
+    def __init__(
+        self,
+        register_map: dict[str, tuple[Router, dict[str, tuple[tuple[str, str], dict[str, Any]]]]],
+    ):
+        self.register_map = register_map
+
+        # register
+        for router_name, (router, router_options) in self.register_map.items():
+            for route_group, method_arg_list in self.route_registry[router_name].items():
+                # get post-callbacks for reserved key "post"
+                # assumed no kwargs for passthrough
+                if route_group == 'post':
+                    for method, _ in method_arg_list:
+                        router.add_post_callback(method)
+                    continue
+
+                group_options = router_options.get(route_group)
+                if group_options is None:
+                    continue
+
+                # "group_route_kwargs" are route kwargs provided @ group level
+                # "method_route_kwargs" are route kwargs provided @ method level 
+                # |-> considered more specific and will override group kwargs
+                (endpoint, pattern), group_route_kwargs = group_options
+                for method, method_route_kwargs in method_arg_list:
+                    router.register(
+                        endpoint,
+                        update_wrapper(partial(method, self), method),
+                        pattern,
+                        **{
+                            **group_route_kwargs,
+                            **method_route_kwargs
+                        }
+                    )
+
+    def get_router(self, router_key_list: list[str]):
+        return ChainRouter([self.register_map[k][0] for k in router_key_list])
+

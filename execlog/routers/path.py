@@ -46,24 +46,40 @@ class PathRouter(Router[FileEvent]):
 
     def filter(self, event, glob, **listen_kwargs) -> bool:
         '''
-        Note:
-            If ``handle_events`` is called externally, note that this loop will block in the
-            calling thread until the jobs have been submitted. It will _not_ block until
-            jobs have completed, however, as a list of futures is returned. The calling
-            Watcher instance may have already been started, in which case ``run()`` will
-            already be executing in a separate thread. Calling this method externally will
-            not interfere with this loop insofar as it adds jobs to the same thread pool.
+        Filter path events based on the provided glob pattern and listen arguments.
 
-            Because this method only submits jobs associated with the provided ``events``,
-            the calling thread can await the returned list of futures and be confident
-            that top-level callbacks associated with these file events have completed. Do
-            note that, if the Watcher has already been started, any propagating file
-            events will be picked up and possibly process simultaneously (although their
-            associated callbacks will have nothing to do with the return list of futures).
+        This method is needed due to the lack of granularity when you have separate router
+        callbacks that listen to the same directory (or overlap on some nested directory
+        therein) with *different listen flags*. The overlapping path in question will only
+        ever be assigned a single watch descriptor by iNotify, but will (or at least appears
+        to) add (via bitwise OR) new flags if the same path is registered. Thus, an event
+        fired by iNotify cannot be automatically propagated to the registered callbacks,
+        as the file event "action" may apply only to a subset of those functions. This is
+        the place for that final delineation, ensuring the exact action is matched before
+        callback execution. This has the benefit of being a suitable proxy for the actual
+        iNotify filtering that takes place when submitting synthetic events to the router
+        by hand. 
+
+        **Bigger picture, and why we have to reproduce the work already done by an
+        event-based mechanism like iNotify**: Realistically, such a method is needed
+        regardless if we hope to connect to the threaded router model as we do not
+        canonically store callback associations at the listener level. If our responses
+        could be tied one-to-one to the sensitivities of iNotify events, then they could
+        be called directly in response to them. But they are not: we want to support
+        glob-based filtering, need to delineate by flags as explained above, and can have
+        separate endpoints for the same path. These are conditions *not* collapsed at the
+        iNotify level, and thus need to be fully re-implemented for callback matching.
+        (For example, imagine we had callback uniqueness on just endpoint and glob, i.e.,
+        no sensitivity to flags, then the flag-matching conditions implemented here would
+        not be needed to rightly pass iNotify events to their callbacks. In such a case,
+        we could rely fully on iNotify's flag response model to implicitly handle this
+        aspect of the filtering process. If the same could be said the remaining
+        constraints, then as mentioned, we could simply associate callbacks one-to-one and
+        avoid the auxiliary filtering altogether.)
 
         Parameters:
-            event : Event instance
-            glob  : Single string or tuple of glob patterns to check against event endpoint
+            event: Event instance
+            glob:  Single string or tuple of glob patterns to check against event endpoint
         '''
         not_tmp_glob = '**/!(.*|*.tmp|*~)'
         if not glob_match(Path(event.name), not_tmp_glob):

@@ -1,5 +1,6 @@
 from execlog import util
 from execlog import routers
+from execlog import syncers
 from execlog import listeners
 
 from execlog.server   import Server

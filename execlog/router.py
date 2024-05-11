@@ -96,7 +96,7 @@ class Router[E: Event]:
         self.loop         = loop
         self.workers      = workers
 
-        self.routemap        : dict[str, list[tuple]] = defaultdict(list)
+        self.routemap : dict[str, list[tuple]] = defaultdict(list)
         self.post_callbacks = []
 
         # track running jobs by event
@@ -592,7 +592,7 @@ class RouteRegistryMeta(type):
 
         return super().__new__(cls, name, bases, attrs)
 
-class RouterBuilder(metaclass=RouteRegistryMeta):
+class RouterBuilder(ChainRouter, metaclass=RouteRegistryMeta):
     '''
     Builds a (Chain)Router using attached methods and passed options.
 
@@ -656,9 +656,11 @@ class RouterBuilder(metaclass=RouteRegistryMeta):
         register_map: dict[str, tuple[Router, dict[str, tuple[tuple[str, str], dict[str, Any]]]]],
     ):
         self.register_map = register_map
+        routers = []
 
         # register
         for router_name, (router, router_options) in self.register_map.items():
+            routers.append(router)
             for route_group, method_arg_list in self.route_registry[router_name].items():
                 # get post-callbacks for reserved key "post"
                 # assumed no kwargs for passthrough
@@ -686,6 +688,10 @@ class RouterBuilder(metaclass=RouteRegistryMeta):
                         }
                     )
 
-    def get_router(self, router_key_list: list[str]):
-        return ChainRouter([self.register_map[k][0] for k in router_key_list])
+        super().__init__(routers)
+
+    # -- disabling for now to inherit from ChainRouter directly. Require the order to
+    # -- simply be specified by the order of the router keys in the register_map
+    # def get_router(self, router_key_list: list[str]):
+    #     return ChainRouter([self.register_map[k][0] for k in router_key_list])
 

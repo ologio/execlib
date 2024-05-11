@@ -159,9 +159,13 @@ class PathListener(Listener[FileEvent]):
             logger.info(f'> Listening on path {path} for flags {iflags.from_mask(flags)}')
 
             for (callback, pattern, debounce, delay, *_) in self.router.routemap[path]:
+                callback_name = str(callback)
+                if hasattr(callback, '__name__'):
+                    callback_name = callback.__name__
+
                 logger.info(
                     color_text(
-                        f'| > {pattern} -> {callback.__name__} (debounce {debounce}ms, delay {delay}ms)',
+                        f'| > {pattern} -> {callback_name} (debounce {debounce}ms, delay {delay}ms)',
                         Style.DIM,
                     )
                 )
@@ -315,19 +319,17 @@ class PathListener(Listener[FileEvent]):
             If ``handle_events`` is called externally, note that this loop will block in the
             calling thread until the jobs have been submitted. It will *not* block until
             jobs have completed, however, as a list of futures is returned. The calling
-            Watcher instance may have already been started, in which case ``run()`` will
+            Listener instance may have already been started, in which case ``run()`` will
             already be executing in a separate thread. Calling this method externally will
             not interfere with this loop insofar as it adds jobs to the same thread pool.
 
             Because this method only submits jobs associated with the provided ``events``,
             the calling thread can await the returned list of futures and be confident
             that top-level callbacks associated with these file events have completed. Do
-            note that, if the Watcher has already been started, any propagating file
+            note that, if the Listener has already been started, any propagating file
             events will be picked up and possibly processed simultaneously (although their
             associated callbacks will have nothing to do with the returned list of futures).
         '''
-        from execlog.router import Event
-        
         for event in events:
             # hard coded ignores
             if util.path.glob_match(event.name, util.path.IGNORE_PATTERNS): continue
@@ -359,7 +361,7 @@ class PathListener(Listener[FileEvent]):
 
                 logger.debug(f'Watcher fired for [{relpath}]: {mask_flags}')
                 
-                route_event = Event(endpoint=str(path), name=str(relpath), action=mask_flags)
+                route_event = FileEvent(endpoint=str(path), name=str(relpath), action=mask_flags)
                 self.router.submit(route_event)
 
             # handle renamed directories; old dir was being watched if these flags

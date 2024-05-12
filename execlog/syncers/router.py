@@ -1,11 +1,20 @@
+import logging
 from pathlib import Path
+from concurrent.futures import as_completed
+
+from tqdm import tqdm
+from colorama import Fore, Back, Style
+from inotify_simple import flags as iflags
 
 from co3.resources import DiskResource
 from co3 import Differ, Syncer, Database
 
 from execlog.event import Event
 from execlog.routers import PathRouter
+from execlog.util.generic import color_text
 
+
+logger = logging.getLogger(__name__)
 
 class PathDiffer(Differ[Path]):
     def __init__(
@@ -101,16 +110,18 @@ class PathRouterSyncer(Syncer[Path]):
         '''
         return [
             self._construct_event(str(path), endpoint, iflags.MODIFY)
-            for endpoint, _ in path_tuples[1]
+            for endpoint, _ in path_tuples[0]
         ]
 
     def filter_diff_sets(self, l_excl, r_excl, lr_int):
         total_disk_files = len(l_excl) + len(lr_int)
+        total_joint_files = len(lr_int)
 
         def file_out_of_sync(p): 
-            db_el, disk_el = lr_int[p]
+            _, db_el = lr_int[p]
             db_mtime = float(db_el[0].get('mtime','0'))
-            disk_mtime = File(p, disk_el[0]).mtime
+            disk_mtime = Path(p).stat().st_mtime
+
             return disk_mtime > db_mtime
 
         lr_int = {p:v for p,v in lr_int.items() if file_out_of_sync(p)}
@@ -119,10 +130,10 @@ class PathRouterSyncer(Syncer[Path]):
         oos_count = len(l_excl) + len(lr_int)
         oos_prcnt = oos_count / max(total_disk_files, 1) * 100
 
-        logger.info(color_text(Fore.GREEN,  f'{len(l_excl)} new files to add'))
-        logger.info(color_text(Fore.YELLOW, f'{len(lr_int)} modified files'))
-        logger.info(color_text(Fore.RED,    f'{len(r_excl)} files to remove'))
-        logger.info(color_text(Style.DIM,   f'({oos_prcnt:.2f}%) of disk files out-of-sync'))
+        logger.info(color_text(f'{len(l_excl)} new files to add',                                Fore.GREEN)),
+        logger.info(color_text(f'{len(lr_int)} modified files [{total_joint_files} up-to-date]', Fore.YELLOW)),
+        logger.info(color_text(f'{len(r_excl)} files to remove',                                 Fore.RED)),
+        logger.info(color_text(f'({oos_prcnt:.2f}%) of disk files out-of-sync',                  Style.DIM)),
 
         return l_excl, r_excl, lr_int
 
@@ -137,12 +148,18 @@ class PathRouterSyncer(Syncer[Path]):
         results = []
         for future in tqdm(
             as_completed(event_futures),
-            total=chunk_size,
-            desc=f'Awaiting chunk futures [submitted {len(event_futures)}/{chunk_size}]'
+            total=len(event_futures),
+            desc=f'Awaiting chunk futures [submitted {len(event_futures)}]'
         ):
             try:
-                results.append(future.result())
+                if not future.cancelled():
+                    results.append(future.result())
             except Exception as e:
                 logger.warning(f"Sync job failed with exception {e}")
 
         return results
+
+    def shutdown(self):
+        super().shutdown()
+        self.router.shutdown()
+

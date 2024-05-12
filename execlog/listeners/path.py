@@ -401,6 +401,5 @@ class PathListener(Listener[FileEvent]):
             self.write.write(b"\x00")
             self.write.close()
 
-        if self.router.thread_pool is not None:
-            self.router.thread_pool.shutdown()
+        self.router.shutdown()
         

@@ -9,16 +9,16 @@ import traceback
 import threading
 from pathlib import Path
 from typing import Any, Callable
-from colorama import Fore, Style
 from collections import defaultdict
+from colorama import Fore, Back, Style
 from functools import partial, update_wrapper
 from concurrent.futures import ThreadPoolExecutor, wait, as_completed
 
 from tqdm.auto import tqdm
 
-from execlog.util.generic import color_text
 from execlog.event import Event
 from execlog.listener import Listener
+from execlog.util.generic import color_text
 
 
 logger = logging.getLogger(__name__)
@@ -110,6 +110,10 @@ class Router[E: Event]:
 
         # track event history
         self.event_log = []
+
+        # shutdown flag, mostly for callbacks
+        self.should_exit = False
+        self._active_futures = set()
 
         self._thread_pool = None
         self._route_lock  = threading.Lock()
@@ -229,6 +233,11 @@ class Router[E: Event]:
         Note: this method is expected to return a future. Perform any event-based
         filtering before submitting a callback with this method.
         '''
+        # exit immediately if exit flag is set
+        # if self.should_exit:
+        #     return
+        callback = self.wrap_safe_callback(callback)
+
         if inspect.iscoroutinefunction(callback):
             if self.loop is None:
                 self.loop = asyncio.new_event_loop()
@@ -245,7 +254,8 @@ class Router[E: Event]:
             future = self.thread_pool.submit(
                 callback, *args, **kwargs
             )
-            future.add_done_callback(handle_exception)
+            self._active_futures.add(future)
+            future.add_done_callback(self.general_task_done)
 
         return future
 
@@ -354,9 +364,10 @@ class Router[E: Event]:
         future_results = []
         for future in as_completed(futures):
             try:
-                future_results.append(future.result())
+                if not future.cancelled():
+                    future_results.append(future.result())
             except Exception as e:
-                logger.warning(f"Router callback job failed with exception {e}")
+                logger.warning(f"Router callback job failed with exception \"{e}\"")
 
         return future_results
 
@@ -374,6 +385,22 @@ class Router[E: Event]:
         Overridable by inheriting classes based on callback structure
         '''
         self.running_events[event_idx].update(callbacks)
+
+    def wrap_safe_callback(self, callback: Callable):
+        '''
+        Check for shutdown flag and exit before running the callbacks. 
+
+        Applies primarily to jobs enqueued by the ThreadPoolExecutor but not started when
+        an interrupt is received.
+        '''
+        def safe_callback(callback, *args, **kwargs):
+            if self.should_exit:
+                logger.debug('Exiting early from queued callback')
+                return
+
+            return callback(*args, **kwargs) 
+
+        return partial(safe_callback, callback)
 
     def filter(self, event: E, pattern, **listen_kwargs) -> bool:
         '''
@@ -435,8 +462,15 @@ class Router[E: Event]:
         The check for results from the passed future allows us to know when in fact a
         valid frame has finished, and a resubmission may be on the table.
         '''
-        result = future.result()
-        if not result: return
+        result = None
+        if not future.cancelled():
+            result = future.result()
+        else:
+            return None
+
+        # result should be *something* if work was scheduled
+        if not result:
+            return None
 
         self.event_log.append((event, result))
         queued_callbacks = self.stop_event(event)
@@ -450,6 +484,29 @@ class Router[E: Event]:
 
     def event_index(self, event):
         return event[:2]
+
+    def shutdown(self):
+        logger.info(color_text('Router shutdown received', Fore.BLACK, Back.RED))
+
+        self.should_exit = True
+        for future in tqdm(
+            list(self._active_futures),
+            desc=color_text('Cancelling active futures...', Fore.BLACK, Back.RED),
+            colour='red',
+        ):
+            future.cancel()
+
+        if self.thread_pool is not None:
+            self.thread_pool.shutdown(wait=False)
+
+    def general_task_done(self, future):
+        self._active_futures.remove(future)
+        try:
+            if not future.cancelled():
+                future.result()
+        except Exception as e:
+            logger.error(f"Exception occurred in threaded task: '{e}'")
+            #traceback.print_exc()
 
 
 class ChainRouter[E: Event](Router[E]):
@@ -543,14 +600,6 @@ class ChainRouter[E: Event](Router[E]):
         for router in self.ordered_routers:
             router.extend_listener(listener)
         return listener
-
-
-def handle_exception(future):
-    try:
-        future.result()
-    except Exception as e:
-        print(f"Exception occurred: {e}")
-        traceback.print_exc()
 
 
 # RouterBuilder
@@ -666,7 +715,9 @@ class RouterBuilder(ChainRouter, metaclass=RouteRegistryMeta):
                 # assumed no kwargs for passthrough
                 if route_group == 'post':
                     for method, _ in method_arg_list:
-                        router.add_post_callback(method)
+                        router.add_post_callback(
+                            update_wrapper(partial(method, self), method),
+                        )
                     continue
 
                 group_options = router_options.get(route_group)

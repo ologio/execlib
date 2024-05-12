@@ -39,8 +39,8 @@ class ColorFormatter(logging.Formatter):
             formatter = self.FORMATS[submodule]
 
         name = record.name
-        if package == 'localsys':
-            name = f'localsys.{subsubmodule}'
+        if package == 'execlog':
+            name = f'execlog.{subsubmodule}'
 
         limit = 26
         name  = name[:limit]

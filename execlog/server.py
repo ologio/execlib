@@ -15,7 +15,6 @@ listeners in one place.
     make the Server definition more flexible.
 '''
 import re
-import signal
 import asyncio
 import logging
 import threading
@@ -74,6 +73,8 @@ class Server:
         self.server   = None
         self.server_text = ''
         self.server_args = {}
+
+        self.started = False
 
         self.loop = None
         self._server_setup()
@@ -228,6 +229,8 @@ class Server:
             if not listener.started:
                 listener.start()
 
+        self.started = False
+
         if self.server:
             logger.info(f'Server{self.server_text} @ http://{self.host}:{self.port}')
 
@@ -292,7 +295,6 @@ class Server:
 
             self.loop.call_soon_threadsafe(set_should_exit)
 
-
 class ListenerServer:
     '''
     Server abstraction to handle disparate listeners.
@@ -305,15 +307,15 @@ class ListenerServer:
             managed_listeners = []
 
         self.managed_listeners = managed_listeners
+        self.started = False
 
     def start(self):
-        signal.signal(signal.SIGINT,  lambda s,f: self.shutdown())
-        signal.signal(signal.SIGTERM, lambda s,f: self.shutdown())
-
         for listener in self.managed_listeners:
             #loop.run_in_executor(None, partial(self.listener.start, loop=loop))
             if not listener.started:
                 listener.start()
+
+        self.started = True
 
         for listener in self.managed_listeners:
             listener.join()

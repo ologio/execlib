@@ -1,4 +1,5 @@
 import logging
+import concurrent 
 from pathlib import Path
 from concurrent.futures import as_completed
 
@@ -10,6 +11,7 @@ from co3.resources import DiskResource
 from co3 import Differ, Syncer, Database
 
 from execlog.event import Event
+from execlog.router import CancelledFrameError
 from execlog.routers import PathRouter
 from execlog.util.generic import color_text
 
@@ -146,20 +148,44 @@ class PathRouterSyncer(Syncer[Path]):
 
         # note: we structure this future waiting like this for the TQDM view
         results = []
-        for future in tqdm(
-            as_completed(event_futures),
+        success = 0
+        cancelled = 0
+        errored = 0
+        submitted = len(event_futures)
+        progress_bar = tqdm(
             total=len(event_futures),
             desc=f'Awaiting chunk futures [submitted {len(event_futures)}]'
-        ):
+        )
+
+        for future in as_completed(event_futures):
             try:
-                if not future.cancelled():
-                    results.append(future.result())
+                callback_future_list = future.result()
+                results.append(callback_future_list)
+                success += 1
+            except concurrent.futures.CancelledError as e:
+                cancelled += 1
+                #logger.error(f'Event future cancelled; "{e}"')
+            except CancelledFrameError as e:
+                errored += 1
+                pass
+                #logger.error(f'Event frame cancelled; "{e}"')
             except Exception as e:
-                logger.warning(f"Sync job failed with exception {e}")
+                errored += 1
+                logger.warning(f'Sync job failed with unknown exception "{e}"')
+
+            suc_txt = color_text(f'{success}',   Fore.GREEN)
+            can_txt = color_text(f'{cancelled}', Fore.YELLOW)
+            err_txt = color_text(f'{errored}',   Fore.RED)
+            tot_txt = color_text(f'{success+cancelled+errored}', Style.BRIGHT)
+            progress_bar.set_description(
+                f'Awaiting chunk futures [{tot_txt} / {submitted} | {suc_txt} {can_txt} {err_txt}]'
+            )
+            progress_bar.update(n=1)
+
+        progress_bar.close()
 
         return results
 
     def shutdown(self):
         super().shutdown()
         self.router.shutdown()
-

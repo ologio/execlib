@@ -94,7 +94,8 @@ def test_server_with_listeners():
     server.shutdown()
     thread.join()
 
-    # finally check the router event logs
-    assert router1.event_log[0][1] == ['router1 job success']
-    assert router2.event_log[0][1] == ['router2 job success']
+    # finally check the router event logs: holds tier-I futures, which hold lists of
+    # tier-II futures
+    assert [r.result() for r in router1.event_log[0][1].result()] == ['router1 job success']
+    assert [r.result() for r in router2.event_log[0][1].result()] == ['router2 job success']
 

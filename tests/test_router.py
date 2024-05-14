@@ -1,6 +1,7 @@
 import logging
 from pathlib import Path
 from functools import partial
+from concurrent.futures import wait
 
 from execlog import util
 from execlog import ChainRouter, Event
@@ -41,7 +42,7 @@ def test_single_router_submission():
         Event(endpoint='endpoint_proxy', name='file3'),
     ]
     futures = router2.submit(events)
-    router2.wait_on_futures(futures)
+    wait(futures)
     
     assert True
 
@@ -52,7 +53,7 @@ def test_chain_router_submission():
         Event(endpoint='endpoint_proxy', name='file3'),
     ]
     futures = chain_router.submit(events)
-    chain_router.wait_on_futures(futures)
+    wait(futures)
 
     assert True
 

@@ -8,6 +8,13 @@ from colorama import Fore, Back, Style
 def color_text(text, *colorama_args):
     return f"{''.join(colorama_args)}{text}{Style.RESET_ALL}"
 
+def get_func_name(func):
+    func_name = str(func)
+    if hasattr(func, '__name__'):
+        func_name = func.__name__
+
+    return func_name
+
 
 class ColorFormatter(logging.Formatter):
     _format = '%(levelname)-8s :: %(name)s %(message)s'

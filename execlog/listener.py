@@ -1,5 +1,4 @@
 '''
-
 See also:
 
 - https://inotify-simple.readthedocs.io/en/latest/#gracefully-exit-a-blocking-read

@@ -8,10 +8,10 @@ from collections import defaultdict
 from colorama import Fore, Back, Style
 from inotify_simple import INotify, Event as iEvent, flags as iflags, masks as imasks
 
-from execlog import util
-from execlog.util.generic import color_text
-from execlog.event import FileEvent
-from execlog.listener import Listener
+from execlib import util
+from execlib.util.generic import color_text
+from execlib.event import FileEvent
+from execlib.listener import Listener
 
 
 logger = logging.getLogger(__name__)

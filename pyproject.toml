@@ -12,7 +12,7 @@ description = "Lightweight multi-threaded job framework"
 readme = "README.md"
 requires-python = ">=3.12"
 dynamic = ["version"]
-license = {file = "LICENSE"}
+#license = {file = "LICENSE"}
 authors = [
   { name="Sam Griesemer", email="samgriesemer+git@gmail.com" },
 ]
@@ -45,12 +45,12 @@ docs = [
 ]
 
 [project.urls]
-Homepage = "https://doc.olog.io/execlog"
-Documentation = "https://doc.olog.io/execlog"
-Repository = "https://git.olog.io/olog/execlog"
-Issues = "https://git.olog.io/olog/execlog/issues"
+Homepage = "https://doc.olog.io/execlib"
+Documentation = "https://doc.olog.io/execlib"
+Repository = "https://git.olog.io/olog/execlib"
+Issues = "https://git.olog.io/olog/execlib/issues"
 
 
 [tool.setuptools.packages.find]
-include = ["execlog*"] # pattern to match package names 
+include = ["execlib*"] # pattern to match package names 
 

@@ -1,4 +1,4 @@
-# `execlog` package docs 
+# `execlib` package docs 
 {ref}`genindex`
 {ref}`modindex`
 {ref}`search`
@@ -10,18 +10,18 @@
    :nosignatures:
    :recursive:
 
-    execlog.Handler
-    execlog.Listener
-    execlog.Router
-    execlog.Server
-    execlog.listeners
+    execlib.Handler
+    execlib.Listener
+    execlib.Router
+    execlib.Server
+    execlib.listeners
 ```
 
 ## Auto-reference contents
 ```{toctree}
 :maxdepth: 3
 
-_autoref/execlog.rst
+_autoref/execlib.rst
 ```
 
 ```{toctree}

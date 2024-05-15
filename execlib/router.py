@@ -18,9 +18,9 @@ from concurrent.futures import ThreadPoolExecutor, wait, as_completed
 
 from tqdm.auto import tqdm
 
-from execlog.event import Event
-from execlog.listener import Listener
-from execlog.util.generic import color_text, get_func_name
+from execlib.event import Event
+from execlib.listener import Listener
+from execlib.util.generic import color_text, get_func_name
 
 
 logger = logging.getLogger(__name__)

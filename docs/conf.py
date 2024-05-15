@@ -6,7 +6,7 @@
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
-project = 'execlog'
+project = 'execlib'
 copyright = '2024, Sam Griesemer'
 author = 'Sam Griesemer'
 

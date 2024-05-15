@@ -1,5 +1,5 @@
 # Overview
-`execlog` is a lightweight multi-threaded job framework written in Python. It implements a
+`execlib` is a lightweight multi-threaded job framework written in Python. It implements a
 simple event-based model over core Python utilities like `ThreadPoolExecutor` to
 facilitate reactivity and manage concurrent responses.
 

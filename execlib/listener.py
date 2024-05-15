@@ -5,7 +5,7 @@ See also:
 '''
 import threading
 
-from execlog.event import Event
+from execlib.event import Event
 
 
 class Listener[E: Event](threading.Thread):

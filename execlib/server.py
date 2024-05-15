@@ -26,8 +26,8 @@ from inotify_simple import flags
 from fastapi import FastAPI, WebSocket
 from fastapi.staticfiles import StaticFiles
 
-from execlog.routers.path import PathRouter
-from execlog.handler import Handler as LREndpoint
+from execlib.routers.path import PathRouter
+from execlib.handler import Handler as LREndpoint
 
 
 logger = logging.getLogger(__name__)

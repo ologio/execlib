@@ -10,10 +10,10 @@ from inotify_simple import flags as iflags
 from co3.resources import DiskResource
 from co3 import Differ, Syncer, Database
 
-from execlog.event import Event
-from execlog.router import CancelledFrameError
-from execlog.routers import PathRouter
-from execlog.util.generic import color_text
+from execlib.event import Event
+from execlib.router import CancelledFrameError
+from execlib.routers import PathRouter
+from execlib.util.generic import color_text
 
 
 logger = logging.getLogger(__name__)

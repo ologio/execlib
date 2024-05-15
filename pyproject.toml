@@ -1,24 +1,55 @@
 [build-system]
-requires = ["setuptools"]
+requires = ["setuptools", "wheel", "setuptools-git-versioning>=2.0,<3"]
 build-backend = "setuptools.build_meta"
 
+# populates dynamically set version with latest git tag
+[tool.setuptools-git-versioning]
+enabled = true
+
 [project]
-name = "execlog"
-version = "0.4.1"
-authors = [
-  { name="Sam Griesemer", email="samgriesemer@gmail.com" },
-]
+name = "execlib"
 description = "Lightweight multi-threaded job framework"
 readme = "README.md"
 requires-python = ">=3.12"
+dynamic = ["version"]
+license = {file = "LICENSE"}
+authors = [
+  { name="Sam Griesemer", email="samgriesemer+git@gmail.com" },
+]
+keywords = ["concurrent", "async", "inotify"]
 classifiers = [
-    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
 ]
 dependencies = [
-    "tqdm"
+    "tqdm",
+    "wcmatch",
+    "uvicorn",
+    "fastapi",
+    "colorama",
+    "starlette",
+    "inotify_simple",
 ]
+
+[project.optional-dependencies]
+tests = ["pytest", "websockets"]
+docs = [
+    "sphinx",
+    "sphinx-togglebutton",
+    "sphinx-autodoc-typehints",
+    "furo",
+    "myst-parser",
+]
+
+[project.urls]
+Homepage = "https://doc.olog.io/execlog"
+Documentation = "https://doc.olog.io/execlog"
+Repository = "https://git.olog.io/olog/execlog"
+Issues = "https://git.olog.io/olog/execlog/issues"
+
 
 [tool.setuptools.packages.find]
 include = ["execlog*"] # pattern to match package names 

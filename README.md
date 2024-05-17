@@ -3,6 +3,8 @@
 simple event-based model over core Python utilities like `ThreadPoolExecutor` to
 facilitate reactivity and manage concurrent responses.
 
+![High-level execution flow diagram](docs/_static/execlib.png)
+
 There are a few top-level classes exposed by the package:
 
 - **Router**: Central event routing object. Routers facilitate route registration,
@@ -17,3 +19,20 @@ There are a few top-level classes exposed by the package:
   iNotify to dynamically respond to file events.
 - **Server**: Long-running process manager for listeners and optional live-reloading via
   HTTP. Interfaces with listener `start()` and `shutdown()` for graceful interruption.
+
+# Install
+```sh
+pip install execlib
+```
+
+# Development
+
+## Documentation
+```sh
+pip install execlib[docs]
+```
+
+## Testing
+```sh
+pip install execlib[tests]
+```

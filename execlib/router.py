@@ -860,14 +860,15 @@ class Router[E: Event]:
 
         # manually track and cancel pending futures b/c `.shutdown(cancel_futures=True)`
         # is misleading, and will cause an outer `as_completed` loop to hang
-        for future in tqdm(
-            list(self._active_futures),
-            desc=color_text(
-                f'Cancelling {len(self._active_futures)} pending futures...',
-                Fore.BLACK, Back.RED),
-            colour='red',
-        ):
-            future.cancel()
+        if self._active_futures:
+            for future in tqdm(
+                list(self._active_futures),
+                desc=color_text(
+                    f'Cancelling {len(self._active_futures)} pending futures...',
+                    Fore.BLACK, Back.RED),
+                colour='red',
+            ):
+                future.cancel()
 
         if self._thread_pool_2 is not None:
             # cancel pending futures (i.e., those not started)

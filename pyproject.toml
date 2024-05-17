@@ -43,6 +43,7 @@ docs = [
     "furo",
     "myst-parser",
 ]
+jupyter = ["ipykernel"]
 
 [project.urls]
 Homepage = "https://doc.olog.io/execlib"

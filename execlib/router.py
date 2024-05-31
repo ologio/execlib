@@ -990,6 +990,21 @@ class ChainRouter[E: Event](Router[E]):
         return self.running_events.pop(event_idx, None)
 
     def get_listener(self, listener_cls=None):
+        '''
+        Gets the listener for the entire router chain.
+
+        Builds a single listener from the registered endpoints of each router, allowing
+        a global iNotify instance to serve all routes. This provides a clean target for
+        outer server context managers.
+
+        Note that having multiple iNotify instances, even those watching the same
+        directories, in general shouldn't pose an issue. iNotify instances are
+        independent, and the kernel will send events to each listening instance when one
+        occurs. This is why we consolidate the listener for chained routers: we want to
+        respond to events sequentially according to router order, rather than have each
+        router expose a listener that can independently hear and respond to its own
+        events.
+        '''
         if listener_cls is None:
             for router in self.ordered_routers:
                 if router.listener_cls is not None:

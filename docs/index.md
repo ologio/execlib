@@ -32,5 +32,6 @@ reference/documentation/index
 ```
 
 ```{include} ../README.md
+:relative-docs: docs/
+:relative-images:
 ```
-

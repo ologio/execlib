@@ -36,59 +36,58 @@ class Server:
     '''
     Wraps up a development static file server and live reloader.
     '''
+    def __init__(self):
+        self.server = None
+
+        # MT/MP server implementations can check this variable for graceful shutdowns
+        self.should_shutdown = False
+        self.started = False
+
+        # used to isolate server creation logic, when applicable
+        self._init_server()
+
+    def _init_server(self):
+        pass
+
+    def start(self):
+        self.started = True
+
+    def shutdown(self):
+        self.should_shutdown = True
+        logger.debug("Server shutdown request received")
+
+class ProcessServer(Server):
+    '''
+    general subprocess start, shutdown, output catching logic
+    '''
+    pass
+
+class HTTPServer(Server):
     def __init__(
         self,
         host,
         port,
         root,
-        static            : bool        = False,
-        livereload        : bool        = False,
-        managed_listeners : list | None = None,
+        loop = None,
     ):
         '''
         Parameters:
-            host:              host server address (either 0.0.0.0, 127.0.0.1, localhost)
-            port:              port at which to start the server
-            root:              base path for static files _and_ where router bases are attached (i.e.,
-                               when files at this path change, a reload event will be
-                               propagated to a corresponding client page)
-            static:            whether or not to start a static file server
-            livereload:        whether or not to start a livereload server
-            managed_listeners: auxiliary listeners to "attach" to the server process, and to
-                               propagate the shutdown signal to when the server receives an
-                               interrupt.
+            host: host server address (either 0.0.0.0, 127.0.0.1, localhost)
+            port: port at which to start the server
         '''
-        self.host       = host
-        self.port       = port
-        self.root       = root
-        self.static     = static
-        self.livereload = livereload
+        self.host = host
+        self.port = port
+        self.loop = loop
 
-        if managed_listeners is None:
-            managed_listeners = []
-        self.managed_listeners = managed_listeners
+        self.userver = None
 
-        self.listener = None
-        self.userver  = None
-        self.server   = None
-        self.server_text = ''
-        self.server_args = {}
+        super().__init__()
 
-        self.started = False
-
-        self.loop = None
-        self._server_setup()
-
-    def _wrap_static(self):
-        self.server.mount("/", StaticFiles(directory=self.root), name="static")
-
-    def _wrap_livereload(self):
-        self.server.websocket_route('/livereload')(LREndpoint)
-        #self.server.add_api_websocket_route('/livereload', LREndpoint)
-
-    def _server_setup(self):
+    def _init_server(self):
         '''
-        Set up the FastAPI server. Only a single server instance is used here, optionally
+        Set up the FastAPI server and Uvicorn hook.
+
+        Only a single server instance is used here, optionally
         mounting the static route (if static serving enabled) and providing a websocket
         endpoint (if livereload enabled).
 
@@ -97,57 +96,34 @@ class Server:
         behave appropriately, even when remounting the root if serving static files
         (which, if done in the opposite order, would "eat up" the ``/livereload`` endpoint).
         '''
+        if self.loop is None:
+            self.loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(self.loop)
+
         # enable propagation and clear handlers for uvicorn internal loggers;
         # allows logging messages to propagate to my root logger
         log_config = uvicorn.config.LOGGING_CONFIG
-        log_config['loggers']['uvicorn']['propagate'] = True
-        log_config['loggers']['uvicorn']['handlers'] = []
+        log_config['loggers']['uvicorn']['propagate']        = True
+        log_config['loggers']['uvicorn']['handlers']         = []
         log_config['loggers']['uvicorn.access']['propagate'] = True
-        log_config['loggers']['uvicorn.access']['handlers'] = []
-        log_config['loggers']['uvicorn.error']['propagate'] = False
-        log_config['loggers']['uvicorn.error']['handlers'] = []
+        log_config['loggers']['uvicorn.access']['handlers']  = []
+        log_config['loggers']['uvicorn.error']['propagate']  = False
+        log_config['loggers']['uvicorn.error']['handlers']   = []
 
-        self.server_args['log_config'] = log_config
-        self.server_args['host'] = self.host
-        self.server_args['port'] = self.port
+        server_args               = {}
+        server_args['log_config'] = log_config
+        server_args['host']       = self.host
+        server_args['port']       = self.port
 
         @asynccontextmanager
         async def lifespan(app: FastAPI):
             yield
             self.shutdown()
 
-        if self.static or self.livereload:
-            self.server = FastAPI(lifespan=lifespan)
-            #self.server.on_event('shutdown')(self.shutdown)
+        self.server = FastAPI(lifespan=lifespan)
 
-        if self.livereload:
-            self._wrap_livereload()
-            self._listener_setup()
-            self.server_text += '+reload'
-
-        if self.static:
-            self._wrap_static()
-            self.server_text += '+static'
-
-    def _listener_setup(self):
-        '''
-        flags.MODIFY okay since we don't need to reload non-existent pages
-        '''
-        if self.loop is None:
-            self.loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(self.loop)
-
-        #self.listener = listener.WatchFS(loop=self.loop)
-        self.router = PathRouter(loop=self.loop)
-        self.router.register(
-            path=str(self.root), 
-            func=LREndpoint.reload_clients,
-            delay=100, 
-            flags=flags.MODIFY,
-        )
-
-        self.listener = self.router.get_listener()
-        self.managed_listeners.append(self.listener)
+        uconfig = uvicorn.Config(app=self.server, loop=self.loop, **self.server_args)
+        self.userver = uvicorn.Server(config=uconfig)
 
     def start(self):
         '''
@@ -220,24 +196,12 @@ class Server:
             and shut down their thread pools, gracefully close up the Uvicorn server and
             allow the serve coroutine to complete, and finally close down the event loop.
         '''
-        if self.loop is None:
-            self.loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(self.loop)
+        super().start()
 
-        for listener in self.managed_listeners:
-            #loop.run_in_executor(None, partial(self.listener.start, loop=loop))
-            if not listener.started:
-                listener.start()
+        logger.info(f'Starting HTTP server @ http://{self.host}:{self.port}')
 
-        self.started = False
-
-        if self.server:
-            logger.info(f'Server{self.server_text} @ http://{self.host}:{self.port}')
-
-            uconfig = uvicorn.Config(app=self.server, loop=self.loop, **self.server_args)
-            self.userver = uvicorn.Server(config=uconfig)
-            self.loop.run_until_complete(self.userver.serve())
-            self.loop.close()
+        self.loop.run_until_complete(self.userver.serve())
+        self.loop.close()
 
     def shutdown(self):
         '''
@@ -279,15 +243,6 @@ class Server:
             task should be considered "completed," at which point the event loop can be closed
             successfully.
         '''
-        logger.info("Shutting down server...")
-
-        # stop attached auxiliary listeners, both internal & external
-        if self.managed_listeners:
-            logger.info(f"Stopping {len(self.managed_listeners)} listeners...")
-
-            for listener in self.managed_listeners:
-                listener.stop()
-
         # stop FastAPI server if started
         if self.userver is not None:
             def set_should_exit():
@@ -295,7 +250,39 @@ class Server:
 
             self.loop.call_soon_threadsafe(set_should_exit)
 
-class ListenerServer:
+class StaticHTTPServer(Server):
+    def __init__(
+        self,
+        root,
+        *args,
+        **kwargs
+    ):
+        '''
+        Parameters:
+            root: base path for static files _and_ where router bases are attached (i.e.,
+                  when files at this path change, a reload event will be propagated to a
+                  corresponding client page)
+        '''
+        self.root = root
+
+        super().__init__(*args, **kwargs)
+
+    def _init_server(self):
+        super()._init_server()
+
+        self.server.mount(
+            "/",
+            StaticFiles(directory=self.root),
+            name="static"
+        )
+
+class LiveReloadHTTPServer(Server):
+    def _init_server(self):
+        super()._init_server()
+
+        self.server.websocket_route('/livereload')(LREndpoint)
+
+class ListenerServer(Server):
     '''
     Server abstraction to handle disparate listeners.
     '''
@@ -303,24 +290,53 @@ class ListenerServer:
         self,
         managed_listeners : list | None = None,
     ):
+        '''
+        Parameters:
+            managed_listeners: auxiliary listeners to "attach" to the server process, and to
+                               propagate the shutdown signal to when the server receives an
+                               interrupt.
+        '''
+        super().__init__()
+
         if managed_listeners is None:
             managed_listeners = []
 
         self.managed_listeners = managed_listeners
-        self.started = False
+
+    def _listener_setup(self):
+        '''
+        flags.MODIFY okay since we don't need to reload non-existent pages
+        '''
+        if self.loop is None:
+            self.loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(self.loop)
+
+        #self.listener = listener.WatchFS(loop=self.loop)
+        self.router = PathRouter(loop=self.loop)
+        self.router.register(
+            path=str(self.root), 
+            func=LREndpoint.reload_clients,
+            delay=100, 
+            flags=flags.MODIFY,
+        )
+
+        self.listener = self.router.get_listener()
+        self.managed_listeners.append(self.listener)
 
     def start(self):
+        super().start()
+
         for listener in self.managed_listeners:
             #loop.run_in_executor(None, partial(self.listener.start, loop=loop))
             if not listener.started:
                 listener.start()
 
-        self.started = True
-
         for listener in self.managed_listeners:
             listener.join()
 
     def shutdown(self):
+        super().shutdown()
+
         # stop attached auxiliary listeners, both internal & external
         if self.managed_listeners:
             logger.info(f"Stopping {len(self.managed_listeners)} listeners...")

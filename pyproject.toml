@@ -1,28 +1,25 @@
 [build-system]
-requires = ["setuptools", "wheel", "setuptools-git-versioning>=2.0,<3"]
+requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
-
-# populates dynamically set version with latest git tag
-[tool.setuptools-git-versioning]
-enabled = true
 
 [project]
 name = "execlib"
+version = "0.4.5"
 description = "Lightweight multi-threaded job framework"
-readme = "README.md"
 requires-python = ">=3.12"
-dynamic = ["version"]
-#license = {file = "LICENSE"}
 authors = [
-  { name="Sam Griesemer", email="samgriesemer+git@gmail.com" },
+  { name="Sam Griesemer", email="git@olog.io" },
 ]
+readme = "README.md"
+license = "MIT"
 keywords = ["concurrent", "async", "inotify"]
 classifiers = [
-    "Programming Language :: Python :: 3.12",
-    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python",
     "Operating System :: OS Independent",
     "Development Status :: 3 - Alpha",
+
     "Intended Audience :: Developers",
+    "Intended Audience :: End Users/Desktop",
 ]
 dependencies = [
     "tqdm",
@@ -32,18 +29,24 @@ dependencies = [
     "colorama",
     "starlette",
     "inotify_simple",
+    "co3",
 ]
 
+[project.scripts]
+symconf = "execlib.__main__:main"
+
 [project.optional-dependencies]
-tests = ["pytest", "websockets"]
-docs = [
+dev = [
+    "pytest",
+    "websockets",
+]
+doc = [
     "sphinx",
     "sphinx-togglebutton",
     "sphinx-autodoc-typehints",
     "furo",
     "myst-parser",
 ]
-jupyter = ["ipykernel"]
 
 [project.urls]
 Homepage = "https://doc.olog.io/execlib"
@@ -51,7 +54,29 @@ Documentation = "https://doc.olog.io/execlib"
 Repository = "https://git.olog.io/olog/execlib"
 Issues = "https://git.olog.io/olog/execlib/issues"
 
+[dependency-groups]
+dev = [
+    "ipykernel",
+]
 
 [tool.setuptools.packages.find]
-include = ["execlib*"] # pattern to match package names 
+include = ["execlib*"]
 
+[tool.ruff]
+line-length = 79
+
+[tool.ruff.lint]
+select = ["ANN", "E", "F", "UP", "B", "SIM", "I", "C4", "PERF"]
+
+[tool.ruff.lint.isort]
+length-sort = true
+order-by-type = false
+force-sort-within-sections = false
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+docstring-code-format = true
+
+[tool.uv.sources]
+co3 = { path = "../co3", editable = true }
